@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  flask-api:
+    build:
+      context: ./flask-api
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - ./flask-api/app:/app  # For development (hot-reload)
+
+  gradio-ui:
+    build:
+      context: ./gradio-ui
+      dockerfile: Dockerfile
+    ports:
+      - "7860:7860"
+    environment:
+      - FLASK_API_URL=http://flask-api:5000/summarize
+    depends_on:
+      - flask-api
