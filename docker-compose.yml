@@ -1,6 +1,16 @@
 version: '3.8'
 
 services:
+  chroma:
+    image: chromadb/chroma
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/data
+    environment:
+      - ALLOW_RESET=TRUE
+      - CHROMA_SERVER_AUTHN_CREDENTIALS=admin:admin  # Optional auth
+
   flask-api:
     build:
       context: ./flask-api
@@ -9,8 +19,11 @@ services:
       - "5000:5000"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CHROMA_SERVER_HOST=http://chroma:8000  # Connect to Chroma service
     volumes:
-      - ./flask-api/app:/app  # For development (hot-reload)
+      - ./flask-api/app:/app
+    depends_on:
+      - chroma
 
   gradio-ui:
     build:
@@ -20,5 +33,9 @@ services:
       - "7860:7860"
     environment:
       - FLASK_API_URL=http://flask-api:5000/summarize
+      - FLASK_API_URL_ASK=http://flask-api:5000/ask
     depends_on:
       - flask-api
+
+volumes:
+  chroma_data:  # Persistent storage for ChromaDB

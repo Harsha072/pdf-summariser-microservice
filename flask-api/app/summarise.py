@@ -2,41 +2,53 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain.chains.summarize import load_summarize_chain
 from langchain_openai import OpenAI
 from dotenv import load_dotenv
+from retriever import DocumentRetriever
 import os
 
 load_dotenv()
 
-def summarize_pdf(pdf_file_path, custom_prompt=""):
+retriever = DocumentRetriever()
+
+def summarize_pdf(doc_id=None, custom_prompt=""):
     """
-    Summarize a PDF file using LangChain with OpenAI API.
-    
+    Generate a summary of a document using its doc_id from ChromaDB.
     Args:
-        pdf_file_path (str): Path to the PDF file
-        custom_prompt (str, optional): Custom prompt for summarization. Defaults to "".
-    
-    Returns:
-        str: Generated summary
+        doc_id (str): The document ID to summarize
+        custom_prompt (str): Optional custom prompt for summarization
     """
-    # Load OpenAI LLM with API key from environment
-    llm = OpenAI(
-        model_name="gpt-3.5-turbo-instruct",  # Replacement for text-davinci-003
-        temperature=0.3,  # Slightly higher for better results
-        max_tokens=1000,  # Increase if you need longer summaries
-        openai_api_key=os.getenv("OPENAI_API_KEY")
-    )
-    
-    # Load and split the PDF
-    loader = PyPDFLoader(pdf_file_path)
-    docs = loader.load_and_split()
-    
-    # Load summarization chain
-    chain = load_summarize_chain(
-        llm,
-        chain_type="map_reduce",
-        verbose=True  # For debugging
-    )
-    
-    # Run the chain and return the summary
-    summary = chain.run(docs)
-    
-    return summary
+    try:
+        # Initialize LLM
+        llm = OpenAI(
+            model_name="gpt-3.5-turbo-instruct",
+            temperature=0.3,
+            max_tokens=1000,
+            openai_api_key=os.getenv("OPENAI_API_KEY")
+        )
+
+        # Get document chunks from ChromaDB using doc_id
+        filter_criteria = {"doc_id": doc_id} if doc_id else None
+        relevant_docs = retriever.query(
+            question="Summarize this document in detail",
+            filter_criteria=filter_criteria,
+            top_k=5
+        )
+
+        if not relevant_docs:
+            raise ValueError("No document found with the provided ID")
+
+        # Generate summary using map_reduce chain
+        chain = load_summarize_chain(llm, chain_type="map_reduce")
+        summary = chain.run(relevant_docs)
+
+        # Get metadata from first chunk for additional context
+        metadata = relevant_docs[0].metadata
+        
+        return {
+            "summary": summary,
+            "source": metadata.get("source", "Unknown"),
+            "page_count": len(set(doc.metadata.get("page") for doc in relevant_docs)),
+            "upload_time": metadata.get("upload_time")
+        }
+
+    except Exception as e:
+        raise Exception(f"Summarization failed: {str(e)}")
