@@ -2,132 +2,117 @@ import gradio as gr
 import requests
 import os
 
-# FLASK_API_URL_SUMMARIZE = os.getenv("FLASK_API_URL_SUMMARIZE", "http://flask-api:5000/summarize")
+# API endpoints
 FLASK_API_URL_SUMMARIZE = os.getenv("FLASK_API_URL_SUMMARIZE", "http://localhost:5000/summarize")
 FLASK_API_URL_ASK = os.getenv("FLASK_API_URL_ASK", "http://localhost:5000/ask")
 FLASK_API_URL_UPLOAD = os.getenv("FLASK_API_URL_UPLOAD", "http://localhost:5000/upload")
 
-
 def upload_pdf(filepath):
-    """Uploads a PDF file to the Flask API for indexing."""
+    """Uploads a PDF file to the Flask API for processing"""
+    if not filepath:
+        return None, "Error: No file provided"
+    
     try:
         with open(filepath, "rb") as f:
             response = requests.post(FLASK_API_URL_UPLOAD, files={"file": f})
             response.raise_for_status()
+        
         data = response.json()
-        return data.get("doc_id"), f"Successfully uploaded and indexed {data.get('pages_indexed')} pages."
+        return (
+            data.get("doc_id"), 
+            f"✅ File processed successfully! {data.get('pages_processed', 0)} pages indexed."
+        )
     except Exception as e:
         return None, f"Error: {str(e)}"
 
 def summarize_pdf(doc_id):
-    """Gets the summary for the uploaded PDF using doc_id."""
+    """Generates a summary of the uploaded PDF"""
     if not doc_id:
-        return "Please upload a document first."
+        return "Please upload a document first"
     
     try:
         response = requests.post(
             FLASK_API_URL_SUMMARIZE,
-            json={"doc_id": doc_id},
-            timeout=10
+            json={"doc_id": doc_id}
         )
         response.raise_for_status()
-        
-        data = response.json()
-        if "summary" in data:
-            return f"""# Document Summary
-
-{data['summary']}
-
-📚 Source: {data.get('source', 'Unknown')}
-📝 Pages: {data.get('page_count', 'Unknown')}"""
-        else:
-            return "Error: No summary generated."
-            
-    except requests.exceptions.RequestException as e:
-        return f"API Error: {str(e)}"
+        print(response)
+        return response.json().get("answer", "No summary available")
     except Exception as e:
-        return f"Error: {str(e)}"
-
-
+        return f"Error generating summary: {str(e)}"
 
 def ask_question(question, doc_id):
-    print(doc_id)
-    """Sends a question to Flask API and formats the answer."""
+    """Asks a question about the uploaded PDF"""
     if not doc_id:
-        return "Please upload a document first."
+        return "Please upload a document first"
+    if not question:
+        return "Please enter a question"
+    
     try:
-        # 1. Call Flask API
         response = requests.post(
-            FLASK_API_URL_ASK,  # e.g., "http://localhost:5000/ask"
-            json={"question": question, "doc_id": doc_id},
-            timeout=10
+            FLASK_API_URL_ASK,
+            json={
+                "doc_id": doc_id,
+                "question": question
+            }
         )
-        response.raise_for_status()  # Raise error for bad status codes
-        
-        # 2. Process response
-        data = response.json()
-        
-        if "answer" in data:  # If using the LLM-synthesized version
-            return data["answer"]
-        elif "answers" in data:  # If using raw ChromaDB results
-            answers = data["answers"]
-            return "\n\n".join([
-                f"📄 Page {doc.get('page', '?')}:\n{doc['text']}" 
-                for doc in answers
-            ])
-        else:
-            return "No answer found."
-            
-    except requests.exceptions.RequestException as e:
-        return f"API Error: {str(e)}"
+        response.raise_for_status()
+        return response.json().get("answer", "No answer available")
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error getting answer: {str(e)}"
 
 if __name__ == "__main__":
-     with gr.Blocks() as interface:
-        gr.Markdown("# PDF Summarizer and Question Answering")
-        gr.Markdown("First upload your PDF, then you can summarize or ask questions about it.")
+    with gr.Blocks(title="PDF AI Assistant") as interface:
+        gr.Markdown("""
+        # PDF Summarizer and Question Answering
+        Upload a PDF document to get started. Once processed, you can generate a summary or ask questions about the content.
+        """)
         
         # Store document ID in state
-        doc_id = gr.State(None)
+        doc_id = gr.State()
         
         # Upload Section
         with gr.Row():
-            pdf_input = gr.File(label="Upload PDF", type="filepath")
-            upload_status = gr.Textbox(label="Upload Status", interactive=False)
-        upload_button = gr.Button("Upload Document")
-        upload_button.click(
-            upload_pdf,
-            inputs=[pdf_input],
-            outputs=[doc_id, upload_status]
-        )
+            with gr.Column():
+                pdf_input = gr.File(label="Upload PDF", type="filepath")
+                upload_button = gr.Button("Upload Document", variant="primary")
+            upload_status = gr.Textbox(label="Status", interactive=False, elem_id="status")
         
         # Tabs for Summary and Q&A
         with gr.Tabs():
             with gr.Tab("Summarize"):
-                summary_output = gr.Textbox(label="Summary", lines=10)
-                summarize_button = gr.Button("Generate Summary", interactive=True)
-                summarize_button.click(
-                    summarize_pdf,
-                    inputs=[doc_id],
-                    outputs=[summary_output]
-                )
-            
+                summary_output = gr.Markdown(label="Summary")
+                summarize_button = gr.Button("Generate Summary", variant="primary")
+                
             with gr.Tab("Ask Questions"):
                 question_input = gr.Textbox(
                     label="Ask a Question",
-                    placeholder="Type your question here..."
+                    placeholder="Type your question about the document here..."
                 )
-                answer_output = gr.Textbox(label="Answer", lines=10)
-                ask_button = gr.Button("Ask")
-                ask_button.click(
-                    ask_question,
-                    inputs=[question_input, doc_id],
-                    outputs=[answer_output]
-                )
+                answer_output = gr.Markdown(label="Answer")
+                ask_button = gr.Button("Ask", variant="primary")
+        
+        # Event handling
+        upload_button.click(
+            fn=upload_pdf,
+            inputs=[pdf_input],
+            outputs=[doc_id, upload_status]
+        )
+        
+        summarize_button.click(
+            fn=summarize_pdf,
+            inputs=[doc_id],
+            outputs=[summary_output]
+        )
+        
+        ask_button.click(
+            fn=ask_question,
+            inputs=[question_input, doc_id],
+            outputs=[answer_output]
+        )
 
-interface.launch(
+    interface.launch(
         server_name="0.0.0.0",
         server_port=7860,
         share=True
-)
+    )

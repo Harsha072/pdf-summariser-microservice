@@ -1,3 +1,5 @@
+celery
+redis
 langchain
 langchain-community
 langchain_openai
