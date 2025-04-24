@@ -1,52 +1,95 @@
 import gradio as gr
 import requests
 import os
+from typing import Tuple
 
 # API endpoints
 FLASK_API_URL_SUMMARIZE = os.getenv("FLASK_API_URL_SUMMARIZE", "http://localhost:5000/summarize")
 FLASK_API_URL_ASK = os.getenv("FLASK_API_URL_ASK", "http://localhost:5000/ask")
 FLASK_API_URL_UPLOAD = os.getenv("FLASK_API_URL_UPLOAD", "http://localhost:5000/upload")
+FLASK_API_URL_SAVE_SUMMARY = os.getenv("FLASK_API_URL_SAVE_SUMMARY", "http://localhost:5000/save")
 
-def upload_pdf(filepath):
+# Custom CSS for better styling
+custom_css = """
+.important-button {
+    background: linear-gradient(45deg, #FF6B6B, #FF8E53) !important;
+    border: none !important;
+}
+.important-button:hover {
+    background: linear-gradient(45deg, #FF8E53, #FF6B6B) !important;
+}
+.processing-status {
+    font-weight: bold;
+    color: #4CAF50;
+}
+.error-status {
+    font-weight: bold;
+    color: #F44336;
+}
+"""
+
+def upload_pdf(filepath: str) -> Tuple[str, str]:
     """Uploads a PDF file to the Flask API for processing"""
     if not filepath:
-        return None, "Error: No file provided"
+        return None, "❌ Error: No file provided"
     
     try:
         with open(filepath, "rb") as f:
-            response = requests.post(FLASK_API_URL_UPLOAD, files={"file": f})
+            response = requests.post(
+                FLASK_API_URL_UPLOAD, 
+                files={"file": f},
+                timeout=30
+            )
             response.raise_for_status()
         
         data = response.json()
         return (
             data.get("doc_id"), 
-            f"✅ File processed successfully! {data.get('pages_processed', 0)} pages indexed."
+            f"✅ {os.path.basename(filepath)} processed successfully! ({data.get('pages_processed', 0)} pages)"
         )
     except Exception as e:
-        return None, f"Error: {str(e)}"
+        return None, f"❌ Error: {str(e)}"
 
-def summarize_pdf(doc_id):
+def save_summary(doc_id: str, summary: str) -> str:
+    """Saves the edited summary back to the backend."""
+    if not doc_id:
+        return "⚠️ Please upload a document first"
+    if not summary.strip():
+        return "⚠️ No summary to save"
+
+    try:
+        response = requests.post(
+            FLASK_API_URL_SAVE_SUMMARY,
+            json={"doc_id": doc_id, "summary": summary},
+            timeout=10
+        )
+        response.raise_for_status()
+        return "✅ Summary saved successfully!"
+    except Exception as e:
+        return f"❌ Error saving summary: {str(e)}"
+
+def summarize_pdf(doc_id: str) -> str:
     """Generates a summary of the uploaded PDF"""
     if not doc_id:
-        return "Please upload a document first"
+        return "⚠️ Please upload a document first"
     
     try:
         response = requests.post(
             FLASK_API_URL_SUMMARIZE,
-            json={"doc_id": doc_id}
+            json={"doc_id": doc_id},
+            timeout=30
         )
         response.raise_for_status()
-        print(response)
         return response.json().get("answer", "No summary available")
     except Exception as e:
-        return f"Error generating summary: {str(e)}"
+        return f"❌ Error generating summary: {str(e)}"
 
-def ask_question(question, doc_id):
+def ask_question(question: str, doc_id: str) -> str:
     """Asks a question about the uploaded PDF"""
     if not doc_id:
-        return "Please upload a document first"
-    if not question:
-        return "Please enter a question"
+        return "⚠️ Please upload a document first"
+    if not question.strip():
+        return "⚠️ Please enter a question"
     
     try:
         response = requests.post(
@@ -54,57 +97,116 @@ def ask_question(question, doc_id):
             json={
                 "doc_id": doc_id,
                 "question": question
-            }
+            },
+            timeout=15
         )
         response.raise_for_status()
-        return response.json().get("answer", "No answer available")
+        answer = response.json().get("answer", "No answer available")
+        sources = response.json().get("sources", [])
+        if sources:
+            answer += "\n\n📚 Sources:\n- " + "\n- ".join(sources)
+        return answer
     except Exception as e:
-        return f"Error getting answer: {str(e)}"
+        return f"❌ Error getting answer: {str(e)}"
 
 if __name__ == "__main__":
-    with gr.Blocks(title="PDF AI Assistant") as interface:
+    with gr.Blocks(title="PDF AI Assistant", css=custom_css) as interface:
         gr.Markdown("""
-        # PDF Summarizer and Question Answering
-        Upload a PDF document to get started. Once processed, you can generate a summary or ask questions about the content.
+        # 📄 Document AI Assistant
+        Upload a PDF document to generate summaries and ask questions
         """)
-        
-        # Store document ID in state
-        doc_id = gr.State()
-        
-        # Upload Section
+
         with gr.Row():
-            with gr.Column():
-                pdf_input = gr.File(label="Upload PDF", type="filepath")
-                upload_button = gr.Button("Upload Document", variant="primary")
-            upload_status = gr.Textbox(label="Status", interactive=False, elem_id="status")
-        
-        # Tabs for Summary and Q&A
-        with gr.Tabs():
-            with gr.Tab("Summarize"):
-                summary_output = gr.Markdown(label="Summary")
-                summarize_button = gr.Button("Generate Summary", variant="primary")
-                
-            with gr.Tab("Ask Questions"):
-                question_input = gr.Textbox(
-                    label="Ask a Question",
-                    placeholder="Type your question about the document here..."
-                )
-                answer_output = gr.Markdown(label="Answer")
-                ask_button = gr.Button("Ask", variant="primary")
-        
-        # Event handling
+            with gr.Column(scale=2):
+                # Upload Section
+                with gr.Group():
+                    gr.Markdown("### 1. Upload Document")
+                    pdf_input = gr.File(
+                        label="Drag PDF here",
+                        file_types=[".pdf"],
+                        type="filepath"
+                    )
+                    upload_button = gr.Button(
+                        "Process Document",
+                        variant="primary",
+                        elem_classes="important-button"
+                    )
+                    upload_status = gr.Textbox(
+                        label="Status",
+                        interactive=False,
+                        elem_classes="processing-status"
+                    )
+                    doc_id = gr.State()
+
+            with gr.Column(scale=3):
+                # Summary Section
+                with gr.Tab("📝 Summary"):
+                    with gr.Group():
+                        gr.Markdown("### 2. Generate & Edit Summary")
+                        with gr.Row():
+                            summarize_button = gr.Button(
+                                "Generate Summary",
+                                variant="primary"
+                            )
+                            save_button = gr.Button(
+                                "Save Summary",
+                                visible=True
+                            )
+                        summary_output = gr.Textbox(
+                            label="Document Summary",
+                            lines=12,
+                            interactive=True,
+                            placeholder="Summary will appear here..."
+                        )
+                        save_status = gr.Textbox(
+                            label="Save Status",
+                            visible=False
+                        )
+
+                # Q&A Section
+                with gr.Tab("❓ Ask Questions"):
+                    with gr.Group():
+                        gr.Markdown("### 3. Ask About the Document")
+                        question_input = gr.Textbox(
+                            label="Your Question",
+                            placeholder="What are the key findings in this document?",
+                            lines=3
+                        )
+                        ask_button = gr.Button(
+                            "Get Answer",
+                            variant="primary"
+                        )
+                        answer_output = gr.Textbox(
+                            label="Answer",
+                            interactive=False,
+                            lines=8
+                        )
+
+        # Event Handling
         upload_button.click(
             fn=upload_pdf,
             inputs=[pdf_input],
             outputs=[doc_id, upload_status]
+        ).then(
+            fn=lambda: gr.Button(visible=True),
+            outputs=[summarize_button]
         )
-        
+
         summarize_button.click(
             fn=summarize_pdf,
             inputs=[doc_id],
             outputs=[summary_output]
+        ).then(
+            fn=lambda: gr.Textbox(visible=True),
+            outputs=[save_status]
         )
-        
+
+        save_button.click(
+            fn=save_summary,
+            inputs=[doc_id, summary_output],
+            outputs=[save_status]
+        )
+
         ask_button.click(
             fn=ask_question,
             inputs=[question_input, doc_id],
@@ -114,5 +216,6 @@ if __name__ == "__main__":
     interface.launch(
         server_name="0.0.0.0",
         server_port=7860,
-        share=True
+        share=True,
+        favicon_path="https://www.svgrepo.com/show/530600/file-search.svg"
     )

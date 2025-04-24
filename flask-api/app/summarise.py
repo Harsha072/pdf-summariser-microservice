@@ -28,7 +28,7 @@ def summarize_pdf(doc_id=None, custom_prompt=""):
         # Get document chunks from ChromaDB using doc_id
         filter_criteria = {"doc_id": doc_id} if doc_id else None
         relevant_docs = retriever.query(
-            question="Summarize this document in detail",
+            question="Summarize this document in detail and give relevant key points",
             filter_criteria=filter_criteria,
             top_k=5
         )
