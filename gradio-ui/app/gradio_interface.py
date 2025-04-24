@@ -112,7 +112,7 @@ def ask_question(question: str, doc_id: str) -> str:
 if __name__ == "__main__":
     with gr.Blocks(title="PDF AI Assistant", css=custom_css) as interface:
         gr.Markdown("""
-        # 📄 Document AI Assistant
+        # 📄 Ask PDF
         Upload a PDF document to generate summaries and ask questions
         """)
 
