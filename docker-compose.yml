@@ -11,6 +11,25 @@ services:
       - ALLOW_RESET=TRUE
       - CHROMA_SERVER_AUTHN_CREDENTIALS=admin:admin  # Optional auth
 
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+
+  celery-worker:
+    build: 
+      context: ./flask-api
+      dockerfile: Dockerfile
+    command: celery -A tasks worker --loglevel=info
+    volumes:
+      - ./flask-api/app:/app
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+      - chroma
+
   flask-api:
     build:
       context: ./flask-api
@@ -20,10 +39,13 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - CHROMA_SERVER_HOST=http://chroma:8000  # Connect to Chroma service
+      - REDIS_URL=redis://redis:6379/0
     volumes:
       - ./flask-api/app:/app
     depends_on:
       - chroma
+      - redis
+      - celery-worker
 
   gradio-ui:
     build:
