@@ -3,12 +3,13 @@ import requests
 import os
 from typing import Tuple
 
-# API endpoints
-FLASK_API_URL_SUMMARIZE = os.getenv("FLASK_API_URL_SUMMARIZE", "http://localhost:5000/summarize")
-FLASK_API_URL_ASK = os.getenv("FLASK_API_URL_ASK", "http://localhost:5000/ask")
-FLASK_API_URL_UPLOAD = os.getenv("FLASK_API_URL_UPLOAD", "http://localhost:5000/upload")
-FLASK_API_URL_SAVE_SUMMARY = os.getenv("FLASK_API_URL_SAVE_SUMMARY", "http://localhost:5000/save")
+BACKEND_URL = os.getenv("BACKEND_URL", "https://pdf-summariser-microservice.onrender.com")
 
+# API endpoints
+FLASK_API_URL_SUMMARIZE = f"{BACKEND_URL}/summarize"
+FLASK_API_URL_ASK = f"{BACKEND_URL}/ask"
+FLASK_API_URL_UPLOAD = f"{BACKEND_URL}/upload"
+FLASK_API_URL_SAVE_SUMMARY = f"{BACKEND_URL}/save"
 # Custom CSS for better styling
 custom_css = """
 .important-button {
@@ -112,7 +113,7 @@ def ask_question(question: str, doc_id: str) -> str:
 if __name__ == "__main__":
     with gr.Blocks(title="PDF AI Assistant", css=custom_css) as interface:
         gr.Markdown("""
-        # 📄 Document AI Assistant
+        # 📄 Ask PDF
         Upload a PDF document to generate summaries and ask questions
         """)
 
