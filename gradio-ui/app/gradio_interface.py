@@ -3,7 +3,8 @@ import requests
 import os
 from typing import Tuple
 
-BACKEND_URL = os.getenv("BACKEND_URL", "https://pdf-summariser-microservice.onrender.com")
+# BACKEND_URL = os.getenv("BACKEND_URL", "https://pdf-summariser-microservice.onrender.com")
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:5000")
 
 # API endpoints
 FLASK_API_URL_SUMMARIZE = f"{BACKEND_URL}/summarize"
