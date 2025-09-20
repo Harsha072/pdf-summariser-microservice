@@ -1,5 +1,0 @@
-pydantic==2.10.6
-gradio
-requests
-python-dotenv
-faiss-cpu

@@ -1,6 +1,7 @@
 from datetime import  time
 from flask import Flask, request, jsonify
 from flask_restful import Api, Resource
+from flask_cors import CORS
 from summarise import summarize_pdf
 from werkzeug.utils import secure_filename
 from retriever import DocumentRetriever
@@ -25,6 +26,10 @@ load_dotenv()
 logger = setup_logger(__name__)
 logger.info("Starting PDF Summarizer microservice")
 app = Flask(__name__)
+
+# Enable CORS for all routes
+CORS(app, origins="*", methods=['GET', 'POST', 'OPTIONS'], allow_headers=['Content-Type'])
+
 api = Api(app)
 retriever = DocumentRetriever()
 
@@ -184,35 +189,12 @@ def upload_file():
         logger.exception("Upload failed")  # Auto logs stack trace
         return jsonify({"error": "Processing failed"}), 500
 
-@app.route('/status/<task_id>')
-def get_status(task_id):
+@app.route('/')
+def get_status():
     """Check the status of a PDF processing task"""
-    task_result = AsyncResult(task_id)
-    
-    if task_result.state == 'PENDING':
-        response = {
-            'state': task_result.state,
-            'status': 'Waiting to start processing...'
-        }
-    elif task_result.state == 'FAILURE':
-        response = {
-            'state': task_result.state,
-            'status': 'Processing failed',
-            'error': str(task_result.info)
-        }
-    elif task_result.state == 'SUCCESS':
-        response = {
-            'state': task_result.state,
-            'status': 'Processing complete',
-            'result': task_result.get()
-        }
-    else:
-        # Processing in progress
-        response = {
-            'state': task_result.state,
-            'status': 'Processing in progress...',
-            'progress': task_result.info if task_result.info else {}
-        }
+    response = {
+        "connectionStatus": "'Connected'"
+    }
     
     return jsonify(response)
 

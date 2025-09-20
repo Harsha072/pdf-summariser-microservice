@@ -7,6 +7,7 @@ openai
 PyPDF2
 flask
 flask-restful
+flask-cors
 python-dotenv
 pypdf
 chromadb
