@@ -42,12 +42,12 @@ class DocumentRetriever:
             logger.error(f"Error indexing document: {str(e)}")
             raise
 
-    # def query(self, question, top_k=1, filter_criteria=None):
-    #     return self.vector_store.similarity_search(
-    #         query=question,
-    #         k=top_k,
-    #         filter=filter_criteria  # Filters by metadata
-    #     )
+    def query(self, question, top_k=1, filter_criteria=None):
+        return self.vector_store.similarity_search(
+            query=question,
+            k=top_k,
+            filter=filter_criteria  # Filters by metadata
+        )
 
     def query_with_sources(self, question, filter_criteria=None, top_k=5):
         """

@@ -41,34 +41,27 @@ CHUNK_SIZE = 10  # Optimal for CPU-bound tasks
 MAX_WORKERS = min(32, os.cpu_count() + 4)  # Dynamic worker count
 chroma_lock = threading.Lock() 
 
-@app.route('/summarize', methods=['POST'])
-def summarize():
+@app.route('/summary', methods=['POST'])
+def generate_summary():
+    doc_id = request.json.get("doc_id")
     
-    doc_id = request.json.get("doc_id")  # Optional: Filter by specific upload
-    print(doc_id)
     if not doc_id:
-        return jsonify({"error": "Question is required"}), 400
+        return jsonify({"error": "Document ID is required"}), 400
 
     try:
-        # Filter by doc_id if provided, else search all documents
-        filter_criteria = doc_id if doc_id else None
+        # Use the summarize_pdf function
+        summary_result = summarize_pdf(doc_id)
         
-        # Get top 3 most relevant chunks (filtered if doc_id exists)
-        docs = summarize_pdf(doc_id)
+        if not summary_result:
+            return jsonify({"error": "No content found for this document"}), 404
         
-        if not docs:
-            return jsonify({"error": "No matching content found"}), 404
-        
-        print(docs['summary'])
-
-        
-
         return jsonify({
-            "answer": docs['summary']
+            "answer": summary_result.get('summary', 'No summary available')
         })
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Error in generate_summary: {str(e)}", exc_info=True)
+        return jsonify({"error": f"Summarization failed: {str(e)}"}), 500
     
 # @app.route('/save', methods=['POST'])
 # def save_summary():
@@ -191,30 +184,45 @@ def upload_file():
 
 @app.route('/')
 def get_status():
-    """Check the status of a PDF processing task"""
+    """Check the status of the application"""
     response = {
-        "connectionStatus": "'Connected'"
+        "connectionStatus": "Connected",
+        "status": "healthy"
     }
-    
     return jsonify(response)
 
-@app.route('/ask', methods=['POST'])
-def ask_question():
+@app.route('/health')
+def health_check():
+    """Health check endpoint for React frontend"""
+    try:
+        # You could add more health checks here (database, etc.)
+        return jsonify({
+            "status": "healthy",
+            "message": "Backend is running properly"
+        }), 200
+    except Exception as e:
+        return jsonify({
+            "status": "unhealthy", 
+            "error": str(e)
+        }), 500
+
+@app.route('/question', methods=['POST'])
+def ask_question_endpoint():
     question = request.json.get("question")
-    doc_id = request.json.get("doc_id")  # Optional: Filter by specific upload
+    doc_id = request.json.get("doc_id")
 
     if not question:
         return jsonify({"error": "Question is required"}), 400
 
+    if not doc_id:
+        return jsonify({"error": "Document ID is required"}), 400
+
     try:
-        # Create filter criteria for doc_id if provided
-        filter_criteria = None
-        if doc_id:
-            filter_criteria = {"doc_id": doc_id}
+        # Create filter criteria for doc_id
+        filter_criteria = {"doc_id": doc_id}
         
         # Use the enhanced query method for source attribution
         query_result = retriever.query_with_sources(question, filter_criteria=filter_criteria, top_k=5)
-        print("********** ", query_result)
 
         if not query_result['sources']:
             return jsonify({"error": "No matching content found"}), 404
@@ -273,7 +281,7 @@ def ask_question():
 
         return jsonify({
             "answer": answer,
-            "sources": sources_for_response,  # Use cleaned up sources
+            "sources": sources_for_response,
             "metadata": {
                 "total_sources": len(query_result['sources']),
                 "query_time": query_result.get('query_time', 0)
@@ -282,7 +290,12 @@ def ask_question():
 
     except Exception as e:
         logger.error(f"Error in ask_question: {str(e)}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Question processing failed: {str(e)}"}), 500
+
+@app.route('/ask', methods=['POST'])
+def ask_question():
+    # Keep the original /ask endpoint for backward compatibility
+    return ask_question_endpoint()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
