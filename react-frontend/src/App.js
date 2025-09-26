@@ -17,7 +17,7 @@ function App() {
 
   const checkBackendConnection = async () => {
     try {
-      const response = await fetch('/api/health');
+      const response = await fetch('http://localhost:5000/health');
       if (response.ok) {
         setBackendConnection('connected');
       } else {

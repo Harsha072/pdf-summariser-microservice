@@ -29,11 +29,11 @@ const Header = ({ connectionStatus }) => {
       <div className="header-container">
         <div className="header-content">
           <div className="header-title">
-            <i className="fas fa-file-pdf header-icon"></i>
+            <i className="fas fa-question-circle header-icon"></i>
             <div>
-              <h1>PDF AI Assistant</h1>
+              <h1>Document Q&A Assistant</h1>
               <div className="header-subtitle">
-                Professional Document Analysis & AI-Powered Insights
+                AI-Powered Document Analysis & Question Answering
               </div>
             </div>
           </div>

@@ -2,10 +2,11 @@ import React, { useCallback } from 'react';
 import './FileUpload.css';
 import { useDocument } from '../../context/DocumentContext';
 import { useNotification } from '../../context/NotificationContext';
-import { uploadDocument } from '../../services/api';
+import { uploadDocument, pollProcessingStatus } from '../../services/api';
+import ProgressBar from '../ProgressBar/ProgressBar';
 
 const FileUpload = () => {
-  const { updateDocument } = useDocument();
+  const { document: documentState, updateDocument } = useDocument();
   const { showError, showSuccess, showInfo } = useNotification();
 
   const handleFileSelect = useCallback(async (file) => {
@@ -15,33 +16,76 @@ const FileUpload = () => {
     }
 
     try {
+      // Start upload process
       updateDocument({ 
         fileName: file.name, 
-        status: 'uploading' 
+        status: 'uploading',
+        progress: 0,
+        progressMessage: 'Starting upload...'
       });
       
-      showInfo('Processing document...');
+      showInfo('Uploading document...');
 
-      // Upload to backend
-      const result = await uploadDocument(file);
+      // Upload to backend (now returns immediately)
+      const uploadResult = await uploadDocument(file);
       
-      // Read file for PDF viewer
+      if (uploadResult.status !== 'accepted') {
+        throw new Error('Upload was not accepted by server');
+      }
+
+      const docId = uploadResult.doc_id;
+      
+      // Update status to processing
+      updateDocument({
+        id: docId,
+        status: 'processing',
+        progress: 5,
+        progressMessage: 'Upload complete, processing started...'
+      });
+
+      showInfo('Processing document - this may take a moment...');
+
+      // Read file for PDF viewer while processing happens
       const fileReader = new FileReader();
       fileReader.onload = (e) => {
         updateDocument({
-          id: result.doc_id,
-          pdfData: e.target.result,
-          status: 'ready'
+          pdfData: e.target.result
         });
       };
       fileReader.readAsArrayBuffer(file);
 
+      // Start polling for processing status
+      const finalStatus = await pollProcessingStatus(
+        docId,
+        (status) => {
+          // Update progress during processing
+          updateDocument({
+            progress: status.progress || 0,
+            progressMessage: status.message || 'Processing...',
+            processingStatus: status
+          });
+        },
+        300000 // 5 minute timeout
+      );
+
+      // Processing completed successfully
+      updateDocument({
+        status: 'ready',
+        progress: 100,
+        progressMessage: 'Processing complete!',
+        processingStatus: finalStatus
+      });
+
       showSuccess('Document processed successfully!');
 
     } catch (error) {
-      console.error('Error uploading file:', error);
+      console.error('Error processing file:', error);
       showError(`Error: ${error.message}`);
-      updateDocument({ status: 'error' });
+      updateDocument({ 
+        status: 'error',
+        progressMessage: `Error: ${error.message}`,
+        processingStatus: null
+      });
     }
   }, [updateDocument, showError, showSuccess, showInfo]);
 
@@ -89,6 +133,15 @@ const FileUpload = () => {
           />
         </div>
       </div>
+      
+      {/* Progress Bar */}
+      {(documentState.status === 'uploading' || documentState.status === 'processing') && (
+        <ProgressBar 
+          progress={documentState.progress} 
+          message={documentState.progressMessage}
+          className={documentState.status}
+        />
+      )}
     </div>
   );
 };

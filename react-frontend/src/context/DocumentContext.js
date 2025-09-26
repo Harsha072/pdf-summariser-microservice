@@ -16,16 +16,13 @@ export const DocumentProvider = ({ children }) => {
     fileName: '',
     pageCount: 0,
     status: 'none', // 'none', 'uploading', 'processing', 'ready', 'error'
+    processingStatus: null, // Backend processing status object
+    progress: 0, // Progress percentage (0-100)
+    progressMessage: '', // Progress status message
     pdfData: null,
     currentPage: 1,
     zoom: 1.2,
     totalPages: 0
-  });
-
-  const [summary, setSummary] = useState({
-    content: '',
-    loading: false,
-    error: null
   });
 
   const [qa, setQa] = useState({
@@ -39,10 +36,6 @@ export const DocumentProvider = ({ children }) => {
     setDocument(prev => ({ ...prev, ...updates }));
   }, []);
 
-  const updateSummary = useCallback((updates) => {
-    setSummary(prev => ({ ...prev, ...updates }));
-  }, []);
-
   const updateQa = useCallback((updates) => {
     setQa(prev => ({ ...prev, ...updates }));
   }, []);
@@ -53,21 +46,21 @@ export const DocumentProvider = ({ children }) => {
       fileName: '',
       pageCount: 0,
       status: 'none',
+      processingStatus: null,
+      progress: 0,
+      progressMessage: '',
       pdfData: null,
       currentPage: 1,
       zoom: 1.2,
       totalPages: 0
     });
-    setSummary({ content: '', loading: false, error: null });
     setQa({ question: '', answer: '', loading: false, error: null });
   }, []);
 
   const value = {
     document,
-    summary,
     qa,
     updateDocument,
-    updateSummary,
     updateQa,
     clearDocument
   };

@@ -55,60 +55,75 @@ const QATab = () => {
 
   return (
     <div className="qa-tab">
-      <div className="form-group">
-        <label className="form-label" htmlFor="questionInput">
-          <i className="fas fa-question"></i>
-          Ask a question about your document
-        </label>
-        <textarea 
-          id="questionInput"
-          className="form-textarea"
-          placeholder="What are the main findings? What methodology was used? Who are the authors?"
-          rows="3"
-          value={qa.question}
-          onChange={handleQuestionChange}
-          onKeyPress={handleKeyPress}
-        />
+      <div className="qa-input-section">
+        <div className="form-group">
+          <label className="form-label" htmlFor="questionInput">
+            <i className="fas fa-question"></i>
+            Ask a question about your document
+          </label>
+          <textarea 
+            id="questionInput"
+            className="form-textarea"
+            placeholder="What are the main findings? What methodology was used? Who are the authors?"
+            rows="3"
+            value={qa.question}
+            onChange={handleQuestionChange}
+            onKeyPress={handleKeyPress}
+          />
+        </div>
+        
+        <button 
+          className="btn btn-primary btn-full"
+          onClick={handleAskQuestion}
+          disabled={!document.id || qa.loading || !qa.question.trim()}
+        >
+          <i className="fas fa-search"></i>
+          {qa.loading ? 'Getting Answer...' : 'Get Answer'}
+        </button>
       </div>
       
-      <button 
-        className="btn btn-primary btn-full"
-        onClick={handleAskQuestion}
-        disabled={!document.id || qa.loading || !qa.question.trim()}
-      >
-        <i className="fas fa-search"></i>
-        {qa.loading ? 'Getting Answer...' : 'Get Answer'}
-      </button>
-      
-      <div className="result-area">
-        {qa.loading && (
-          <div className="loading-container">
-            <LoadingSpinner />
-            <p>Analyzing document and generating answer...</p>
-          </div>
-        )}
-        
-        {qa.error && (
-          <div className="error-container">
-            <i className="fas fa-exclamation-triangle"></i>
-            <p>Error: {qa.error}</p>
-          </div>
-        )}
-        
-        {qa.answer && !qa.loading && (
-          <div className="content-container">
-            <div className="content-text">
-              {qa.answer}
+      <div className="qa-answer-section">
+        <div className="result-area">
+          {qa.loading && (
+            <div className="loading-container">
+              <LoadingSpinner />
+              <p>Analyzing document and generating answer...</p>
             </div>
-            <CopyButton content={qa.answer} />
-          </div>
-        )}
-        
-        {!qa.answer && !qa.loading && !qa.error && (
-          <div className="placeholder-text">
-            Ask a question above to get an AI-generated answer with detailed source citations...
-          </div>
-        )}
+          )}
+          
+          {qa.error && (
+            <div className="error-container">
+              <i className="fas fa-exclamation-triangle"></i>
+              <p>Error: {qa.error}</p>
+            </div>
+          )}
+          
+          {qa.answer && !qa.loading && (
+            <div className="content-container">
+              <div className="content-text">
+                {qa.answer}
+              </div>
+              <CopyButton content={qa.answer} />
+            </div>
+          )}
+          
+          {!qa.answer && !qa.loading && !qa.error && (
+            <div className="placeholder-text">
+              <i className="fas fa-lightbulb"></i>
+              <h3>Ready to analyze your document!</h3>
+              <p>Upload a document and ask questions to get AI-powered insights with source citations.</p>
+              <div className="example-questions">
+                <h4>Example questions:</h4>
+                <ul>
+                  <li>"What are the main findings?"</li>
+                  <li>"What methodology was used?"</li>
+                  <li>"What are the limitations?"</li>
+                  <li>"Who are the key authors cited?"</li>
+                </ul>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
