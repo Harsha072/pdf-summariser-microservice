@@ -158,6 +158,16 @@ class ApiClient {
   async checkHealth() {
     return this.makeRequest('/health');
   }
+
+  async askWithQuotes(docId, question) {
+    return this.makeRequest('/ask-with-quotes', {
+      method: 'POST',
+      body: JSON.stringify({
+        doc_id: docId,
+        question: question
+      })
+    });
+  }
 }
 
 // Create singleton instance
@@ -174,6 +184,7 @@ export const generateResearchQuestions = (docId) => apiClient.generateResearchQu
 export const explainConcept = (docId, concept) => apiClient.explainConcept(docId, concept);
 export const getSectionSummary = (docId, section) => apiClient.getSectionSummary(docId, section);
 export const checkHealth = () => apiClient.checkHealth();
+export const askWithQuotes = (docId, question) => apiClient.askWithQuotes(docId, question);
 export const getProcessingStatus = (docId) => apiClient.getProcessingStatus(docId);
 export const getAllProcessingStatuses = () => apiClient.getAllProcessingStatuses();
 export const pollProcessingStatus = (docId, onProgress, maxWaitTime) => 

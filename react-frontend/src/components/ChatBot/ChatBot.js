@@ -5,7 +5,8 @@ import { useNotification } from '../../context/NotificationContext';
 import { 
   askQuestion as apiAskQuestion,
   analyzePaper,
-  generateResearchQuestions 
+  generateResearchQuestions,
+  askWithQuotes
 } from '../../services/api';
 
 const ChatBot = () => {
@@ -15,11 +16,14 @@ const ChatBot = () => {
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef(null);
+  const messageCounterRef = useRef(0); // Counter to ensure unique IDs
 
+  // Fixed scrollToBottom function (removed useEffect from inside)
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  // Scroll to bottom when messages change
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
@@ -27,9 +31,10 @@ const ChatBot = () => {
   // Initialize with welcome message when document is ready
   useEffect(() => {
     if (document.status === 'ready' && messages.length === 0) {
+      messageCounterRef.current += 1;
       setMessages([
         {
-          id: 1,
+          id: Date.now() + messageCounterRef.current,
           type: 'bot',
           content: `Hi! I'm your AI assistant. I've analyzed your document "${document.fileName}" and I'm ready to help you understand it better. 
 
@@ -39,11 +44,13 @@ Try one of the suggestions below or ask me anything!`,
         }
       ]);
     }
-  }, [document.status, document.fileName]);
+  }, [document.status, document.fileName, messages.length]); // Added messages.length to dependencies
 
+  // Fixed addMessage function (removed duplicate return)
   const addMessage = (type, content, isStreaming = false) => {
+    messageCounterRef.current += 1;
     const newMessage = {
-      id: Date.now(),
+      id: Date.now() + messageCounterRef.current,
       type,
       content,
       timestamp: new Date(),
@@ -59,6 +66,128 @@ Try one of the suggestions below or ask me anything!`,
         msg.id === id ? { ...msg, content, isStreaming: false } : msg
       )
     );
+  };
+
+  // Detect if user is asking for exact location/mention
+  const detectExactMentionQuery = (question) => {
+    const mentionPatterns = [
+      /where\s+(?:does|do|is|are).*mention/i,
+      /which\s+(?:line|paragraph|section|page).*mention/i,
+      /what\s+(?:line|paragraph|section|page).*mention/i,
+      /find.*mention.*of/i,
+      /locate.*mention/i,
+      /where.*(?:discuss|talk|reference)/i,
+      /which\s+(?:paragraph|section).*(?:about|discuss)/i,
+      /find.*reference.*to/i,
+      /show\s+me\s+where/i,
+      /highlight.*where/i
+    ];
+    
+    return mentionPatterns.some(pattern => pattern.test(question));
+  };
+
+  // Extract search term from question
+  const extractSearchTerm = (question) => {
+    // Try different patterns to extract the search term
+    const patterns = [
+      /mention[s]?\s+["']([^"']+)["']/i,
+      /mention[s]?\s+([a-zA-Z\s]{2,20})(?:\s|$|\?)/i,
+      /about\s+["']([^"']+)["']/i,
+      /about\s+([a-zA-Z\s]{2,20})(?:\s|$|\?)/i,
+      /reference[s]?\s+to\s+["']([^"']+)["']/i,
+      /reference[s]?\s+to\s+([a-zA-Z\s]{2,20})(?:\s|$|\?)/i,
+      /discuss[es]?\s+["']([^"']+)["']/i,
+      /discuss[es]?\s+([a-zA-Z\s]{2,20})(?:\s|$|\?)/i,
+      /where\s+is\s+["']([^"']+)["']/i,
+      /where\s+is\s+([a-zA-Z\s]{2,20})(?:\s|$|\?)/i
+    ];
+    
+    for (const pattern of patterns) {
+      const match = question.match(pattern);
+      if (match) {
+        return match[1].trim();
+      }
+    }
+    
+    // Fallback: extract quoted terms
+    const quotedMatch = question.match(/["']([^"']{2,30})["']/);
+    if (quotedMatch) {
+      return quotedMatch[1].trim();
+    }
+    
+    return null;
+  };
+
+  // Navigate to exact location with highlighting
+  const navigateToExactLocation = (location) => {
+    console.log('Navigating to exact location:', location);
+    
+    // Extract highlighting information from the new structure
+    const searchTerms = location.found_terms || [];
+    const mainSearchTerm = searchTerms.length > 0 ? searchTerms[0] : '';
+    
+    window.dispatchEvent(new CustomEvent('highlightInPDF', {
+      detail: {
+        page: location.page,
+        section: location.section,
+        paragraphId: location.paragraph_id,
+        contentType: location.content_type,
+        searchTerms: searchTerms,
+        searchTerm: mainSearchTerm,
+        fullText: location.full_text,
+        highlightInfo: location.highlight_info,
+        bbox: location.bbox,
+        startChar: location.start_char,
+        endChar: location.end_char
+      }
+    }));
+    
+    // Add confirmation message with more details
+    const confirmMessageId = addMessage('bot', `📍 Highlighting "${mainSearchTerm}" on page ${location.page} in section "${location.section}"\n🔍 Looking for terms: ${searchTerms.join(', ')}`);
+    
+    // Mark as navigation message
+    setMessages(prev => prev.map(msg => 
+      msg.id === confirmMessageId ? { ...msg, isNavigation: true } : msg
+    ));
+  };
+
+  // Utility function to escape regex special characters
+  const escapeRegex = (string) => {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  };
+
+  // Format answer with supporting quotes - much simpler than exact mention formatting
+  const formatAnswerWithQuotes = (result) => {
+    const { answer, supporting_quotes, confidence } = result;
+    
+    if (!supporting_quotes || supporting_quotes.length === 0) {
+      return answer + "\n\n💡 *I couldn't find specific supporting quotes for this answer.*";
+    }
+
+    return answer;
+  };
+
+  // Navigate to quote location with highlighting
+  const navigateToQuote = (quote) => {
+    console.log('Navigating to quote:', quote);
+
+    // Extract a good search term from the quote text
+    const quoteText = quote.text || '';
+    const searchTerm = quoteText.length > 50 ? 
+                      quoteText.substring(0, 50).trim() : 
+                      quoteText.trim();
+
+    window.dispatchEvent(new CustomEvent('highlightInPDF', {
+      detail: {
+        page: quote.page,
+        section: quote.section,
+        searchTerm: searchTerm, // Primary search term
+        searchTerms: [searchTerm], // Backup array format
+        highlightText: quoteText, // Full quote text
+        bbox: quote.bbox,
+        exactMatch: true
+      }
+    }));
   };
 
   const handleSuggestionClick = (suggestion) => {
@@ -110,15 +239,30 @@ Try one of the suggestions below or ask me anything!`,
     // Add user message
     addMessage('user', userMessage);
 
-    // Add typing indicator
+    // Use Smart Quote Finder for ALL questions
     setIsTyping(true);
-    const typingId = addMessage('bot', 'Thinking...', true);
+    const typingId = addMessage('bot', 'Analyzing document and finding supporting quotes...', true);
 
     try {
-      const result = await apiAskQuestion(document.id, userMessage);
+      const result = await askWithQuotes(document.id, userMessage);
+      console.log('Smart Quote Finder result:', result);
       
       setIsTyping(false);
-      updateMessage(typingId, result.answer);
+      
+      // Create the answer with quotes
+      const answerWithQuotes = formatAnswerWithQuotes(result);
+      const messageId = updateMessage(typingId, answerWithQuotes);
+      
+      // Add quote data to message for highlighting
+      setMessages(prev => prev.map(msg => 
+        msg.id === typingId ? {
+          ...msg,
+          hasQuotes: true,
+          quotesData: result.supporting_quotes || [],
+          confidence: result.confidence || 0,
+          question: userMessage
+        } : msg
+      ));
       
       // Update QA context for compatibility
       updateQa({ 
@@ -264,17 +408,57 @@ Try one of the suggestions below or ask me anything!`,
         {messages.map((message) => (
           <div key={message.id} className={`message ${message.type}`}>
             <div className="message-content">
-              {message.content.split('\n').map((line, index) => (
-                <div key={index}>
-                  {line.startsWith('**') && line.endsWith('**') ? (
-                    <strong>{line.slice(2, -2)}</strong>
-                  ) : line.startsWith('• ') ? (
-                    <div className="bullet-point">{line}</div>
-                  ) : (
-                    line
-                  )}
+              {message.hasQuotes && message.quotesData?.length > 0 ? (
+                <div className="smart-quote-response">
+                  <div className="answer-text">
+                    {message.content.split('\n').map((line, idx) => (
+                      <div key={idx} className="answer-line">
+                        {line.startsWith('**') && line.endsWith('**') ? (
+                          <strong>{line.slice(2, -2)}</strong>
+                        ) : line.startsWith('• ') ? (
+                          <div className="bullet-point">{line}</div>
+                        ) : (
+                          line
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="quote-section">
+                    <h4>📍 Supporting Quotes (Confidence: {message.confidence}%)</h4>
+                    {message.quotesData.slice(0, 3).map((quote, idx) => (
+                      <div 
+                        key={`quote-${message.id}-${idx}`}
+                        className="quote-card"
+                        data-confidence={
+                          quote.confidence >= 75 ? 'high' : 
+                          quote.confidence >= 50 ? 'medium' : 'low'
+                        }
+                        onClick={() => navigateToQuote(quote)}
+                      >
+                        <div className="quote-text">"{quote.text}"</div>
+                        <div className="quote-source">
+                          📄 Page {quote.page} • {quote.section} • {quote.confidence}% match
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
+              ) : (
+                <div className="message-text">
+                  {message.content.split('\n').map((line, index) => (
+                    <div key={index}>
+                      {line.startsWith('**') && line.endsWith('**') ? (
+                        <strong>{line.slice(2, -2)}</strong>
+                      ) : line.startsWith('• ') ? (
+                        <div className="bullet-point">{line}</div>
+                      ) : (
+                        line
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             
             {/* Suggestion Chips */}
@@ -302,11 +486,11 @@ Try one of the suggestions below or ask me anything!`,
                   💡 Explain Key Concepts
                 </button>
                 <button 
-                  className="suggestion-chip"
-                  onClick={() => handleSuggestionClick('What is this about?')}
+                  className="suggestion-chip exact-search"
+                  onClick={() => setInputValue("Where does the author mention")}
                   disabled={isTyping}
                 >
-                  ❓ What is this about?
+                  🔍 Find Exact Mention
                 </button>
               </div>
             )}
@@ -337,7 +521,7 @@ Try one of the suggestions below or ask me anything!`,
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder={document.status === 'ready' ? "Ask me anything about your document..." : "Upload a document to start chatting..."}
+            placeholder={document.status === 'ready' ? "Ask me anything or try: 'Where does the author mention machine learning?'" : "Upload a document to start chatting..."}
             disabled={document.status !== 'ready' || isTyping}
             rows="1"
             className="chat-input"

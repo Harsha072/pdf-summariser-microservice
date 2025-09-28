@@ -3,7 +3,7 @@
   flex-direction: column;
   gap: 1.5rem;
   height: 100%;
-  overflow: hidden; /* Changed from auto to hidden */
+  overflow: hidden;
 }
 
 .chatbot-wrapper {
@@ -13,57 +13,97 @@
   min-height: 0;
 }
 
-/* Thin Progress Bar */
-.progress-container {
-  width: 100%;
-  margin-bottom: 1rem;
+/* Popup Alert Overlay */
+.popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.popup-alert {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: popupSlideIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  max-width: 90vw;
+  max-height: 90vh;
+}
+
+@keyframes popupSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.7) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.popup-content {
+  padding: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  min-width: 350px;
+}
+
+.processing-spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid #e3f2fd;
+  border-top: 4px solid #1976d2;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
   flex-shrink: 0;
 }
 
-.progress-bar-thin {
-  width: 100%;
-  height: 3px;
-  background-color: #e5e7eb;
-  border-radius: 2px;
-  overflow: hidden;
-  position: relative;
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
-.progress-fill-thin {
-  height: 100%;
-  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-  border-radius: 2px;
-  transition: width 0.3s ease;
-  position: relative;
+.processing-message {
+  flex: 1;
 }
 
-.progress-fill-thin::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.4),
-    transparent
-  );
-  animation: shimmer 1.5s infinite;
+.processing-message h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #1565c0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-@keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+.processing-message h4::before {
+  content: '🔍';
+  font-size: 1.4rem;
 }
 
-.progress-text {
-  font-size: 0.75rem;
-  color: #6b7280;
-  text-align: center;
-  margin-top: 0.5rem;
-  font-weight: 500;
+.processing-message p {
+  margin: 0;
+  font-size: 1rem;
+  color: #424242;
+  line-height: 1.4;
 }
 
 .control-card {

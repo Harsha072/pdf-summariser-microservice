@@ -1,10 +1,9 @@
 celery
 redis
 langchain
-langchain-community
 langchain_openai
 openai
-PyPDF2
+PyMuPDF
 flask
 flask-restful
 flask-cors

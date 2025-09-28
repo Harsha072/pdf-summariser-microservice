@@ -1,3 +1,97 @@
+/* Smart Quote Response Styles */
+.smart-quote-response {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.answer-text {
+  line-height: 1.6;
+}
+
+.quote-section {
+  border-top: 2px solid #e5e7eb;
+  padding-top: 1rem;
+  margin-top: 0.5rem;
+}
+
+.quote-section h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.9rem;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.quote-card {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.quote-card:hover {
+  background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+  border-color: #667eea;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+}
+
+.quote-card:hover::before {
+  content: "📍 Click to highlight in PDF";
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1f2937;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  z-index: 10;
+  opacity: 0.9;
+}
+
+.quote-text {
+  font-style: italic;
+  color: #1f2937;
+  margin-bottom: 0.5rem;
+  line-height: 1.4;
+  font-size: 0.95rem;
+}
+
+.quote-source {
+  font-size: 0.8rem;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.quote-card:last-child {
+  margin-bottom: 0;
+}
+
+/* Confidence indicator colors */
+.quote-card[data-confidence="high"] {
+  border-left: 4px solid #10b981;
+}
+
+.quote-card[data-confidence="medium"] {
+  border-left: 4px solid #f59e0b;
+}
+
+.quote-card[data-confidence="low"] {
+  border-left: 4px solid #ef4444;
+}
+
 .chatbot-container {
   display: flex;
   flex-direction: column;
@@ -173,6 +267,18 @@
   border-color: #667eea;
   transform: translateY(-1px);
   box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+}
+
+.suggestion-chip.multi-doc {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border-color: #10b981;
+}
+
+.suggestion-chip.multi-doc:hover:not(:disabled) {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  border-color: #059669;
+  box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
 }
 
 .suggestion-chip:active:not(:disabled) {
@@ -391,4 +497,90 @@
   .message {
     max-width: 90%;
   }
+}
+
+/* Exact Mention Styles */
+.exact-mention-response {
+  background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+  border-radius: 12px;
+  padding: 16px;
+  border-left: 4px solid #3b82f6;
+  border: 1px solid #e2e8f0;
+  margin: 8px 0;
+}
+
+.mention-text {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.mention-header {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 8px 0 4px 0;
+}
+
+.mention-line {
+  color: var(--text-secondary);
+  margin: 2px 0;
+  padding-left: 8px;
+}
+
+.mention-actions {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.mention-actions h4 {
+  margin: 0 0 12px 0;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mention-highlight-btn {
+  display: block;
+  width: 100%;
+  padding: 12px 16px;
+  margin: 8px 0;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-align: left;
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
+}
+
+.mention-highlight-btn:hover {
+  background: linear-gradient(135deg, #1d4ed8, #1e40af);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+}
+
+.mention-highlight-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
+}
+
+.mention-highlight-btn i {
+  margin-right: 10px;
+  font-size: 0.8rem;
+}
+
+.suggestion-chip.exact-search {
+  background: linear-gradient(135deg, #10b981, #059669);
+  border-color: #10b981;
+}
+
+.suggestion-chip.exact-search:hover {
+  background: linear-gradient(135deg, #059669, #047857);
+  transform: translateY(-2px);
 }

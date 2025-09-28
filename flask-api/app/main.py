@@ -10,22 +10,18 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 from logger_config import setup_logger
+# Enhanced PDF processing imports
+import pymupdf  # PyMuPDF for better structure extraction
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import partial
-from langchain_community.document_loaders import PyPDFLoader
+# Remove PyPDFLoader, use PyMuPDF instead
 import threading
 import uuid
 import os
 from queue import Queue
 import json
-from queue import Queue
-import json
-import threading
 import tempfile
-import os
-import time
-
-import uuid
 # from tasks import process_pdf
 from celery.result import AsyncResult
 
@@ -53,6 +49,141 @@ chroma_lock = threading.Lock()
 processing_status = {}  # Store processing status by doc_id
 status_lock = threading.Lock()
 
+# Enhanced PDF Processor for structure-aware extraction
+class StructureAwarePDFProcessor:
+    def __init__(self):
+        self.logger = logger
+        
+    def extract_structured_content(self, pdf_path):
+        """Extract PDF content with structure preservation"""
+        try:
+            doc = pymupdf.open(pdf_path)
+            structured_content = []
+            
+            for page_num in range(len(doc)):
+                page = doc.load_page(page_num)
+                page_content = self.extract_page_structure(page, page_num + 1)
+                structured_content.extend(page_content)
+            
+            doc.close()
+            return structured_content
+            
+        except Exception as e:
+            self.logger.error(f"PDF extraction failed: {str(e)}")
+            return []
+    
+    def extract_page_structure(self, page, page_num):
+        """Extract structured content from a single page"""
+        page_content = []
+        
+        # Get text blocks with position information
+        text_dict = page.get_text("dict")
+        
+        current_section = None
+        paragraph_count = 0
+        
+        for block in text_dict["blocks"]:
+            if "lines" in block:
+                # Process text blocks
+                block_text = ""
+                block_bbox = block["bbox"]
+                
+                for line in block["lines"]:
+                    line_text = ""
+                    for span in line["spans"]:
+                        line_text += span["text"]
+                    block_text += line_text + "\n"
+                
+                block_text = block_text.strip()
+                if not block_text:
+                    continue
+                
+                # Classify content type and extract structure
+                content_info = self.classify_content(block_text, block_bbox)
+                
+                if content_info["type"] == "heading":
+                    current_section = block_text
+                elif content_info["type"] == "paragraph":
+                    paragraph_count += 1
+                    
+                    # Create structured content entry
+                    page_content.append({
+                        "text": block_text,
+                        "page": page_num,
+                        "section": current_section or "Content",
+                        "paragraph_id": paragraph_count,
+                        "content_type": content_info["type"],
+                        "bbox": list(block_bbox),  # [x0, y0, x1, y1]
+                        "start_char": len("\n".join([c["text"] for c in page_content])),
+                        "end_char": len("\n".join([c["text"] for c in page_content])) + len(block_text),
+                        "font_size": content_info["font_size"],
+                        "is_bold": content_info["is_bold"]
+                    })
+        
+        return page_content
+    
+    def classify_content(self, text, bbox):
+        """Classify content type based on text and formatting"""
+        # Simple heuristics for content classification
+        lines = text.split('\n')
+        first_line = lines[0].strip() if lines else ""
+        
+        # Check for headings
+        if (len(first_line) < 100 and 
+            (first_line.isupper() or 
+             any(keyword in first_line.lower() for keyword in [
+                 'introduction', 'method', 'result', 'conclusion', 'discussion',
+                 'abstract', 'summary', 'background', 'literature', 'analysis',
+                 'findings', 'recommendation', 'overview', 'chapter', 'section'
+             ]) or
+             len(first_line.split()) <= 6)):
+            return {
+                "type": "heading",
+                "font_size": 12,  # Default, could be extracted from spans
+                "is_bold": True
+            }
+        
+        return {
+            "type": "paragraph",
+            "font_size": 10,
+            "is_bold": False
+        }
+
+# Initialize the PDF processor
+pdf_processor = StructureAwarePDFProcessor()
+
+def filter_metadata_for_chromadb(metadata):
+    """Filter metadata to only include types ChromaDB accepts: str, int, float, bool"""
+    filtered = {}
+    for key, value in metadata.items():
+        if isinstance(value, (str, int, float, bool)):
+            filtered[key] = value
+        elif isinstance(value, list):
+            # Convert lists to strings for ChromaDB compatibility
+            filtered[f"{key}_string"] = ",".join(map(str, value))
+        else:
+            # Convert other types to string
+            filtered[key] = str(value)
+    return filtered
+
+def reconstruct_bbox_from_metadata(metadata):
+    """Reconstruct bbox coordinates from ChromaDB metadata"""
+    try:
+        if "bbox_string" in metadata:
+            coords = metadata["bbox_string"].split(",")
+            return [float(coord) for coord in coords]
+        elif all(key in metadata for key in ["bbox_x0", "bbox_y0", "bbox_x1", "bbox_y1"]):
+            return [
+                metadata["bbox_x0"],
+                metadata["bbox_y0"], 
+                metadata["bbox_x1"],
+                metadata["bbox_y1"]
+            ]
+        else:
+            return None
+    except (ValueError, KeyError):
+        return None
+
 def update_processing_status(doc_id, status, progress=0, message=""):
     """Thread-safe status update"""
     with status_lock:
@@ -64,27 +195,30 @@ def update_processing_status(doc_id, status, progress=0, message=""):
         }
 
 def process_pdf_async(pdf_path, doc_id, filename):
-    """Background PDF processing function"""
+    """Background PDF processing function with structure preservation"""
     try:
         update_processing_status(doc_id, "processing", 10, "Loading PDF...")
         
-        # Load PDF
-        loader = PyPDFLoader(pdf_path)
-        docs = loader.load_and_split()
+        # Extract structured content using PyMuPDF
+        structured_content = pdf_processor.extract_structured_content(pdf_path)
         
-        update_processing_status(doc_id, "processing", 30, "Chunking document...")
+        if not structured_content:
+            update_processing_status(doc_id, "failed", 0, "No content extracted from PDF")
+            return
+        
+        update_processing_status(doc_id, "processing", 30, "Processing structured content...")
         
         # Process in chunks with progress updates
-        total_chunks = len(range(0, len(docs), CHUNK_SIZE))
+        total_chunks = len(range(0, len(structured_content), CHUNK_SIZE))
         processed_chunks = 0
         
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = []
             
-            for chunk_idx, i in enumerate(range(0, len(docs), CHUNK_SIZE)):
+            for chunk_idx, i in enumerate(range(0, len(structured_content), CHUNK_SIZE)):
                 future = executor.submit(
-                    process_chunk,
-                    docs_chunk=docs[i:i + CHUNK_SIZE],
+                    process_structured_chunk,
+                    content_chunk=structured_content[i:i + CHUNK_SIZE],
                     doc_id=doc_id,
                     filename=filename,
                     start_idx=i
@@ -146,43 +280,50 @@ def generate_summary():
 #     except Exception as e:
 #         return jsonify({"error": str(e)}), 500
 
-def extract_section_heading(text):
-    """Extract potential section heading from text"""
-    lines = text.strip().split('\n')
-    for line in lines[:3]:  # Check first 3 lines
-        line = line.strip()
-        # Look for common section patterns
-        if (len(line) < 100 and 
-            (line.isupper() or 
-             any(keyword in line.lower() for keyword in [
-                 'introduction', 'method', 'result', 'conclusion', 'discussion',
-                 'abstract', 'summary', 'background', 'literature', 'analysis',
-                 'findings', 'recommendation', 'overview', 'chapter', 'section'
-             ]) or
-             (len(line.split()) <= 5 and line.endswith('.') == False))):
-            return line
-    return None
+# Remove unused extract_section_heading function - now handled by StructureAwarePDFProcessor
 
-def process_chunk(docs_chunk, doc_id, filename, start_idx):
-    """Enhanced chunk processor with section heading extraction"""
+def process_structured_chunk(content_chunk, doc_id, filename, start_idx):
+    """Enhanced chunk processor with structure preservation and ChromaDB compatibility"""
     texts = []
     metadatas = []
     ids = []
     
-    for i, doc in enumerate(docs_chunk, start=start_idx):
-        # Extract section heading from content
-        section_heading = extract_section_heading(doc.page_content)
+    for i, content_item in enumerate(content_chunk, start=start_idx):
+        # Use the structured content directly
+        text = content_item["text"]
         
-        texts.append(doc.page_content)
-        metadatas.append({
+        # Convert bbox list to string for ChromaDB compatibility
+        bbox_coords = content_item["bbox"]
+        bbox_string = f"{bbox_coords[0]},{bbox_coords[1]},{bbox_coords[2]},{bbox_coords[3]}"
+        
+        texts.append(text)
+        
+        # Create metadata with only primitive types
+        raw_metadata = {
             "doc_id": doc_id,
             "source": secure_filename(filename),
-            "page": doc.metadata.get("page", i+1),  # Use actual page from PDF
-            "section": section_heading or "Content",  # Add section heading
+            "page": content_item["page"],
+            "section": content_item["section"],
+            "section_heading": content_item["section"],  # For backward compatibility
+            "paragraph_id": content_item["paragraph_id"],
+            "content_type": content_item["content_type"],
+            "bbox_string": bbox_string,  # Convert list to string
+            "bbox_x0": float(bbox_coords[0]),  # Individual bbox coordinates
+            "bbox_y0": float(bbox_coords[1]),
+            "bbox_x1": float(bbox_coords[2]),
+            "bbox_y1": float(bbox_coords[3]),
+            "start_char": content_item["start_char"],
+            "end_char": content_item["end_char"],
             "chunk": i,
             "upload_time": time.time(),
-            "text_length": len(doc.page_content)  # Track chunk size
-        })
+            "text_length": len(text),
+            "font_size": float(content_item["font_size"]),
+            "is_bold": bool(content_item["is_bold"])
+        }
+        
+        # Filter out any complex metadata that ChromaDB can't handle
+        filtered_metadata = filter_metadata_for_chromadb(raw_metadata)
+        metadatas.append(filtered_metadata)
         ids.append(f"{doc_id}-{i}")
     
     # Thread-safe batch insert
@@ -236,16 +377,7 @@ def upload_file():
         return jsonify({"error": "Upload failed"}), 500
 
 
-@app.route('/status/<doc_id>', methods=['GET'])
-def get_status(doc_id):
-    """Get processing status for specific document"""
-    with status_lock:
-        if doc_id not in processing_status:
-            return jsonify({"error": "Document not found"}), 404
-        
-        status_data = processing_status[doc_id].copy()
-    
-    return jsonify(status_data)
+
 
 
 @app.route('/status', methods=['GET'])
@@ -468,211 +600,247 @@ def generate_research_questions(doc_id):
     except Exception as e:
         return jsonify({"error": f"Question generation failed: {str(e)}"}), 500
 
-@app.route('/explain-concept', methods=['POST'])
-def explain_concept():
-    """Explain academic concepts in context of the document"""
+@app.route('/status/<doc_id>', methods=['GET'])
+def get_processing_status(doc_id):
+    """Get processing status for a document"""
+    try:
+        with status_lock:
+            if doc_id in processing_status:
+                return jsonify(processing_status[doc_id])
+            else:
+                return jsonify({
+                    "status": "not_found",
+                    "progress": 0,
+                    "message": "Document not found or not being processed",
+                    "timestamp": time.time()
+                }), 404
+    except Exception as e:
+        logger.error(f"Status check failed for {doc_id}: {str(e)}")
+        return jsonify({"error": f"Status check failed: {str(e)}"}), 500
+
+@app.route('/ask-with-quotes', methods=['POST'])
+def ask_with_supporting_quotes():
+    """Ask a question and get answer with supporting quotes from the document"""
     try:
         data = request.json
-        concept = data.get('concept')
+        question = data.get('question', '')
         doc_id = data.get('doc_id')
         
-        if not concept or not doc_id:
-            return jsonify({"error": "Both concept and doc_id are required"}), 400
-        
-        # Search for concept in document
-        filter_criteria = {"doc_id": doc_id}
-        concept_results = retriever.query_with_sources(
-            f"What is {concept}? How is {concept} defined? {concept} meaning explanation",
-            filter_criteria=filter_criteria,
-            top_k=3
-        )
-        
-        if not concept_results['sources']:
-            return jsonify({"error": f"Concept '{concept}' not found in document"}), 404
-        
-        context = "\n".join([source['text'] for source in concept_results['sources']])
-        
-        explanation_prompt = f"""Explain the concept "{concept}" based on how it's used in this academic paper.
-
-        Context from paper: {context}
-
-        Provide:
-        1. Clear definition of {concept}
-        2. How {concept} is used in this specific research
-        3. Why {concept} is important to this study
-        4. Any related concepts mentioned
-
-        Make it accessible but academically rigorous."""
-        
-        explanation = ChatOpenAI(model="gpt-3.5-turbo").invoke(explanation_prompt).content
-        
-        return jsonify({
-            "concept": concept,
-            "explanation": explanation,
-            "sources": [{
-                "page": source.get('page'),
-                "section": source.get('section_heading'),
-                "snippet": source['text'][:200] + "..."
-            } for source in concept_results['sources']]
-        })
-        
-    except Exception as e:
-        return jsonify({"error": f"Concept explanation failed: {str(e)}"}), 500
-
-@app.route('/section-summary/<doc_id>', methods=['POST'])
-def get_section_summary(doc_id):
-    """Get summary of specific document sections"""
-    try:
-        data = request.json
-        section_name = data.get('section', 'introduction')  # Default to introduction
-        
-        filter_criteria = {"doc_id": doc_id}
-        
-        # Search for specific section content
-        section_query = f"{section_name} section content methodology results findings"
-        section_results = retriever.query_with_sources(
-            section_query,
-            filter_criteria=filter_criteria,
-            top_k=5
-        )
-        
-        if not section_results['sources']:
-            return jsonify({"error": f"Section '{section_name}' not found"}), 404
-        
-        # Filter results that actually match the section
-        relevant_sources = []
-        for source in section_results['sources']:
-            section_heading = source.get('section_heading', '').lower()
-            if section_name.lower() in section_heading or section_heading in section_name.lower():
-                relevant_sources.append(source)
-        
-        if not relevant_sources:
-            relevant_sources = section_results['sources'][:3]  # Fallback to top results
-        
-        context = "\n".join([source['text'] for source in relevant_sources])
-        
-        summary_prompt = f"""Summarize the {section_name} section of this academic paper.
-
-        Content: {context}
-
-        Provide:
-        1. Main points covered in this section
-        2. Key arguments or findings
-        3. Important details or data
-        4. How this section relates to the overall paper
-
-        Keep it concise but comprehensive."""
-        
-        summary = ChatOpenAI(model="gpt-3.5-turbo").invoke(summary_prompt).content
-        
-        return jsonify({
-            "section": section_name,
-            "summary": summary,
-            "sources": [{
-                "page": source.get('page'),
-                "section": source.get('section_heading'),
-                "snippet": source['text'][:150] + "..."
-            } for source in relevant_sources]
-        })
-        
-    except Exception as e:
-        return jsonify({"error": f"Section summary failed: {str(e)}"}), 500
-
-@app.route('/academic-question', methods=['POST'])
-def ask_academic_question():
-    """Enhanced Q&A with academic context and deeper analysis"""
-    try:
-        data = request.json
-        question = data.get("question")
-        doc_id = data.get("doc_id")
-        question_type = data.get("type", "general")  # general, methodology, findings, implications
-        
         if not question or not doc_id:
-            return jsonify({"error": "Question and document ID are required"}), 400
+            return jsonify({"error": "Question and document ID required"}), 400
         
+        logger.info(f"Ask with quotes: '{question}' in doc {doc_id}")
+        
+        # Get AI answer first
         filter_criteria = {"doc_id": doc_id}
-        
-        # Adjust search strategy based on question type
-        if question_type == "methodology":
-            enhanced_question = f"methodology method approach {question}"
-            top_k = 3
-        elif question_type == "findings":
-            enhanced_question = f"results findings conclusions {question}"
-            top_k = 4
-        elif question_type == "implications":
-            enhanced_question = f"implications significance impact applications {question}"
-            top_k = 3
-        else:
-            enhanced_question = question
-            top_k = 5
-        
-        query_result = retriever.query_with_sources(enhanced_question, filter_criteria=filter_criteria, top_k=top_k)
+        query_result = retriever.query_with_sources(question, filter_criteria=filter_criteria, top_k=5)
         
         if not query_result['sources']:
-            return jsonify({"error": "No matching content found for this question"}), 404
+            return jsonify({
+                "answer": "I couldn't find information to answer this question in the document.",
+                "supporting_quotes": [],
+                "confidence": 0
+            })
         
-        # Build enhanced context
+        # Build context for AI
         context_parts = []
-        sources_for_response = []
+        all_sources = []
         
         for i, source in enumerate(query_result['sources'], 1):
-            source_info = f"[Source {i}] {source['filename']}"
-            
-            if source.get('page') and source['page'] != "Unknown":
-                source_info += f" (Page {source['page']})"
-            
-            if source.get('section_heading') and source['section_heading'] not in ["Unknown", None]:
-                source_info += f" - Section: {source['section_heading']}"
-            
-            context_parts.append(f"{source_info}\nContent: {source['text']}")
-            
-            sources_for_response.append({
-                "source_id": i,
-                "filename": source['filename'],
-                "page": source['page'] if source['page'] != "Unknown" else None,
-                "section_heading": source['section_heading'] if source['section_heading'] != "Unknown" else None,
-                "snippet": source['text'][:250] + "...",
-                "doc_id": source['doc_id'],
-                "relevance_score": 0.8 + (0.1 * (5-i))  # Mock relevance scoring
-            })
+            context_parts.append(f"[Source {i}] {source['text']}")
+            all_sources.append(source)
         
         context = "\n\n".join(context_parts)
         
-        # Academic-focused prompt
-        academic_prompt = f"""You are an academic research assistant. Answer this question about the research paper using ONLY the provided context.
-
-        Context from academic paper:
+        # Get AI answer
+        prompt = f"""Answer the question using ONLY the following context from the document.
+        Be specific and factual. If the answer cannot be found, say so.
+        
+        Context:
         {context}
-
+        
         Question: {question}
-        Question Type: {question_type}
-
-        Please provide:
-        1. A comprehensive answer referencing specific sources
-        2. Key evidence or data points that support the answer
-        3. Any limitations or caveats mentioned in the source material
-        4. How this relates to the broader research context
-
-        Format your response with clear source citations (e.g., "According to Source 1...").
-        If the answer cannot be found in the context, clearly state this."""
         
-        answer = ChatOpenAI(model="gpt-3.5-turbo").invoke(academic_prompt).content
+        Answer:"""
         
-        return jsonify({
-            "answer": answer,
-            "sources": sources_for_response,
-            "question_type": question_type,
-            "confidence": "high" if len(query_result['sources']) >= 3 else "medium",
-            "metadata": {
-                "total_sources": len(query_result['sources']),
-                "query_time": query_result.get('query_time', 0),
-                "enhanced_query": enhanced_question
-            }
-        })
+        ai_response = ChatOpenAI(model="gpt-3.5-turbo", temperature=0).invoke(prompt).content
+        
+        # Find supporting quotes by extracting key phrases from AI answer
+        supporting_quotes = find_supporting_quotes_for_answer(ai_response, all_sources)
+        
+        # Calculate confidence based on number of supporting quotes
+        confidence = min(len(supporting_quotes) * 25, 100)  # 25% per quote, max 100%
+        
+        response_data = {
+            "question": question,
+            "answer": ai_response,
+            "supporting_quotes": supporting_quotes,
+            "confidence": confidence,
+            "total_sources_used": len(all_sources)
+        }
+        
+        logger.info(f"Ask with quotes completed: {len(supporting_quotes)} quotes found")
+        return jsonify(response_data)
         
     except Exception as e:
-        logger.error(f"Academic question failed: {str(e)}")
-        return jsonify({"error": f"Question processing failed: {str(e)}"}), 500
+        logger.error(f"Ask with quotes failed: {str(e)}", exc_info=True)
+        return jsonify({"error": f"Request failed: {str(e)}"}), 500
+
+
+def find_supporting_quotes_for_answer(ai_answer, sources):
+    """Find the most relevant quotes from sources that support the AI answer"""
+    import re
+    from difflib import SequenceMatcher
+    
+    # Extract key phrases from AI answer (sentences or important phrases)
+    sentences = re.split(r'[.!?]+', ai_answer.strip())
+    key_phrases = []
+    
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if len(sentence) > 10:  # Skip very short sentences
+            # Extract meaningful phrases (remove common words)
+            words = sentence.lower().split()
+            meaningful_words = [w for w in words if len(w) > 3 and w not in 
+                              ['this', 'that', 'these', 'those', 'with', 'from', 'they', 'were', 'been', 'have']]
+            if len(meaningful_words) >= 2:
+                key_phrases.extend(meaningful_words[:3])  # Take first 3 meaningful words
+    
+    supporting_quotes = []
+    used_sources = set()  # Avoid duplicate sources
+    
+    # Find quotes that contain similar concepts
+    for i, source in enumerate(sources):
+        if i in used_sources or len(supporting_quotes) >= 3:  # Max 3 quotes
+            continue
+            
+        source_text = source['text'].lower()
+        match_score = 0
+        
+        # Calculate similarity score
+        for phrase in key_phrases:
+            if phrase.lower() in source_text:
+                match_score += 1
+        
+        # If we have a good match, include this as a supporting quote
+        if match_score >= 2:  # At least 2 matching concepts
+            # Find the most relevant sentence in the source
+            source_sentences = re.split(r'[.!?]+', source['text'])
+            best_sentence = ""
+            best_score = 0
+            
+            for sent in source_sentences:
+                sent = sent.strip()
+                if len(sent) > 20:  # Skip very short sentences
+                    sent_lower = sent.lower()
+                    score = sum(1 for phrase in key_phrases if phrase in sent_lower)
+                    if score > best_score:
+                        best_score = score
+                        best_sentence = sent
+            
+            if best_sentence:
+                # Reconstruct bbox from metadata if available
+                bbox = None
+                if all(key in source for key in ['bbox_x0', 'bbox_y0', 'bbox_x1', 'bbox_y1']):
+                    bbox = {
+                        "x0": source['bbox_x0'],
+                        "y0": source['bbox_y0'], 
+                        "x1": source['bbox_x1'],
+                        "y1": source['bbox_y1']
+                    }
+                
+                quote = {
+                    "text": best_sentence,
+                    "page": source.get('page', 'Unknown'),
+                    "section": source.get('section_heading', 'Content'),
+                    "confidence": min(match_score * 25, 100),  # Convert to percentage
+                    "bbox": bbox,
+                    "source_id": i
+                }
+                
+                supporting_quotes.append(quote)
+                used_sources.add(i)
+    
+    # Sort by confidence score
+    supporting_quotes.sort(key=lambda x: x['confidence'], reverse=True)
+    
+    return supporting_quotes
+
+
+def extract_search_terms_from_query(question):
+    """Extract meaningful search terms from natural language question"""
+    # Remove common question words
+    stop_words = {
+        'where', 'what', 'how', 'when', 'why', 'which', 'who', 'does', 'do', 'is', 'are',
+        'the', 'author', 'mention', 'discuss', 'talk', 'about', 'section', 'paragraph',
+        'paper', 'document', 'find', 'locate', 'show', 'me', 'in', 'and', 'or', 'of', 'to'
+    }
+    
+    # Extract quoted terms first
+    quoted_terms = re.findall(r'"([^"]*)"', question)
+    
+    # Extract remaining words
+    words = re.findall(r'\b\w+\b', question.lower())
+    filtered_words = [word for word in words if word not in stop_words and len(word) > 2]
+    
+    # Combine quoted terms and filtered words
+    all_terms = quoted_terms + filtered_words
+    
+    # Remove duplicates while preserving order
+    unique_terms = []
+    seen = set()
+    for term in all_terms:
+        if term not in seen:
+            unique_terms.append(term)
+            seen.add(term)
+    
+    return unique_terms[:5]  # Limit to top 5 terms
+
+def find_term_occurrences_in_text(text, search_terms):
+    """Find occurrences of search terms in text with context"""
+    occurrences = []
+    text_lower = text.lower()
+    
+    for term in search_terms:
+        term_lower = term.lower()
+        start_pos = 0
+        
+        while True:
+            pos = text_lower.find(term_lower, start_pos)
+            if pos == -1:
+                break
+            
+            # Get context around the found term
+            context_start = max(0, pos - 50)
+            context_end = min(len(text), pos + len(term) + 50)
+            context = text[context_start:context_end]
+            
+            # Add ellipsis if context is truncated
+            if context_start > 0:
+                context = "..." + context
+            if context_end < len(text):
+                context = context + "..."
+            
+            # Highlight the found term in context
+            highlighted_context = re.sub(
+                f'({re.escape(term)})', 
+                r'**\1**', 
+                context, 
+                flags=re.IGNORECASE
+            )
+            
+            occurrences.append({
+                "found_term": text[pos:pos + len(term)],  # Preserve original case
+                "position": pos,
+                "context": highlighted_context,
+                "exact_match": True
+            })
+            
+            start_pos = pos + 1
+    
+    return occurrences
+
+# Clean endpoint - only essential APIs for structure-aware PDF processing remain
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

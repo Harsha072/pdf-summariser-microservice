@@ -1,7 +1,6 @@
 import React from 'react';
 import './ControlPanel.css';
 import ChatBot from '../ChatBot/ChatBot';
-import DocumentInfo from './DocumentInfo';
 import { useDocument } from '../../context/DocumentContext';
 
 const ControlPanel = () => {
@@ -9,18 +8,18 @@ const ControlPanel = () => {
 
   return (
     <div className="control-panel">
-      {/* Progress Bar - Show during upload/processing */}
+      {/* Popup Alert Overlay - Show during upload/processing */}
       {(document.status === 'uploading' || document.status === 'processing') && (
-        <div className="progress-container">
-          <div className="progress-bar-thin">
-            <div 
-              className="progress-fill-thin" 
-              style={{ width: `${document.progress || 0}%` }}
-            ></div>
+        <div className="popup-overlay">
+          <div className="popup-alert">
+            <div className="popup-content">
+              <div className="processing-spinner"></div>
+              <div className="processing-message">
+                <h4>Analysing document</h4>
+                <p>Please wait while we process your document...</p>
+              </div>
+            </div>
           </div>
-          {document.progressMessage && (
-            <div className="progress-text">{document.progressMessage}</div>
-          )}
         </div>
       )}
 
