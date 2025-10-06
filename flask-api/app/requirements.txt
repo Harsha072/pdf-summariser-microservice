@@ -1,12 +1,21 @@
-celery
-redis
-langchain
+# Academic Paper Discovery Engine Dependencies
+flask
+flask-cors
 langchain_openai
 openai
-PyMuPDF
-flask
-flask-restful
-flask-cors
 python-dotenv
-pypdf
-chromadb
+
+# PDF Processing
+PyMuPDF
+
+# Web Scraping for Paper Discovery
+arxiv
+requests
+beautifulsoup4
+
+# Text Processing and Similarity
+fuzzywuzzy
+python-levenshtein
+
+# Utilities
+werkzeug

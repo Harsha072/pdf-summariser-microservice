@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 import Header from './components/Header/Header';
-import PDFPanel from './components/PDFPanel/PDFPanel';
-import ControlPanel from './components/ControlPanel/ControlPanel';
+import PaperDiscovery from './components/PaperDiscovery/PaperDiscovery';
 import Notification from './components/Notification/Notification';
-import { DocumentProvider } from './context/DocumentContext';
 import { NotificationProvider } from './context/NotificationContext';
 
 function App() {
@@ -17,7 +15,7 @@ function App() {
 
   const checkBackendConnection = async () => {
     try {
-      const response = await fetch('http://localhost:5000/health');
+      const response = await fetch('http://localhost:5000/api/health');
       if (response.ok) {
         setBackendConnection('connected');
       } else {
@@ -31,18 +29,13 @@ function App() {
 
   return (
     <NotificationProvider>
-      <DocumentProvider>
-        <div className="app">
-          <Header connectionStatus={backendConnection} />
-          <main className="app-main">
-            <div className="app-container">
-              <PDFPanel />
-              <ControlPanel />
-            </div>
-          </main>
-          <Notification />
-        </div>
-      </DocumentProvider>
+      <div className="app">
+        <Header connectionStatus={backendConnection} />
+        <main className="app-main">
+          <PaperDiscovery />
+        </main>
+        <Notification />
+      </div>
     </NotificationProvider>
   );
 }

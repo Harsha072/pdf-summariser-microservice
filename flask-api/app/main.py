@@ -1,846 +1,932 @@
-from datetime import datetime
+
+
+import os
+import re
+import json
+import uuid
 import time
-from flask import Flask, request, jsonify
-from flask_restful import Api, Resource
+import logging
+import threading
+from datetime import datetime
+from typing import List, Dict, Any, Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# Flask and web framework imports
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
-from summarise import summarize_pdf
 from werkzeug.utils import secure_filename
-from retriever import DocumentRetriever
-from langchain_core.prompts import ChatPromptTemplate
+
+# AI and OpenAI imports
 from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
-from logger_config import setup_logger
-# Enhanced PDF processing imports
-import pymupdf  # PyMuPDF for better structure extraction
-import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from functools import partial
-# Remove PyPDFLoader, use PyMuPDF instead
-import threading
-import uuid
-import os
-from queue import Queue
-import json
-import tempfile
-# from tasks import process_pdf
-from celery.result import AsyncResult
+
+# Web scraping imports
+import requests
+from bs4 import BeautifulSoup
+import urllib.parse
+
+# PDF processing imports
+import fitz  # PyMuPDF
+
+# Text similarity and processing
+from fuzzywuzzy import fuzz
+
+# ArXiv API import
+try:
+    import arxiv
+except ImportError:
+    print("Warning: arxiv library not installed. Install with: pip install arxiv")
+    arxiv = None
 
 # Load environment variables
 load_dotenv()
-logger = setup_logger(__name__)
-logger.info("Starting PDF Summarizer microservice")
-app = Flask(__name__)
 
-# Enable CORS for all routes
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Initialize Flask app
+app = Flask(__name__)
 CORS(app, origins="*", methods=['GET', 'POST', 'OPTIONS'], allow_headers=['Content-Type'])
 
-api = Api(app)
-retriever = DocumentRetriever()
+# Configuration
+class Config:
+    TEMP_DIR = os.path.join(os.path.dirname(__file__), 'temp')
+    MAX_WORKERS = 4
+    DEFAULT_MAX_RESULTS = 10
+    MAX_ALLOWED_RESULTS = 20
+    DUPLICATE_THRESHOLD = 0.85
+    REQUEST_TIMEOUT = 30
+    
+    # Create temp directory
+    os.makedirs(TEMP_DIR, exist_ok=True)
 
-# Create custom temp directory
-TEMP_DIR = os.path.join(os.path.dirname(__file__), 'temp')
-os.makedirs(TEMP_DIR, exist_ok=True)
+config = Config()
 
-CHUNK_SIZE = 10  # Optimal for CPU-bound tasks
-MAX_WORKERS = min(32, os.cpu_count() + 4)  # Dynamic worker count
-chroma_lock = threading.Lock() 
+# Initialize OpenAI client
+openai_client = None
+try:
+    api_key = os.getenv('OPENAI_API_KEY')
+    if api_key and api_key.strip():
+        openai_client = ChatOpenAI(
+            api_key=api_key,
+            model_name="gpt-3.5-turbo",
+            temperature=0.3,
+            max_tokens=1000
+        )
+        logger.info("OpenAI client initialized successfully")
+    else:
+        logger.warning("OpenAI API key not found. AI features will use fallback methods.")
+except Exception as e:
+    logger.error(f"Failed to initialize OpenAI client: {e}")
+    openai_client = None
 
-# Global variables for async processing
-processing_status = {}  # Store processing status by doc_id
+# Global processing status tracking
+processing_status = {}
 status_lock = threading.Lock()
 
-# Enhanced PDF Processor for structure-aware extraction
-class StructureAwarePDFProcessor:
+
+class ResearchFocusExtractor:
+    """Extract research focus and keywords from text using AI analysis"""
+    
+    def __init__(self, openai_client):
+        self.openai_client = openai_client
+        self.logger = logger
+    
+    def extract_research_focus(self, text: str) -> Dict[str, Any]:
+        """Extract key research topics and keywords using AI"""
+        try:
+            # Validate input
+            if not text or not isinstance(text, str):
+                text = "research analysis"
+            
+            if not self.openai_client:
+                return self._fallback_extraction(text)
+            
+            # Truncate text to avoid token limits
+            text_sample = text[:2000] if len(text) > 2000 else text
+            
+            prompt = f"""
+            Analyze this research text and extract key information for finding relevant academic papers.
+            
+            Text: {text_sample}
+            
+            Please provide a JSON response with exactly these keys:
+            {{
+                "topic": "Main research topic (one sentence)",
+                "keywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5"],
+                "domain": "Research field/domain",
+                "methodologies": ["method1", "method2"],
+                "audience": "graduate"
+            }}
+            
+            Respond only with valid JSON, no additional text.
+            """
+            
+            response = self.openai_client.invoke(prompt)
+            
+            # Parse JSON response with better error handling
+            try:
+                if hasattr(response, 'content'):
+                    content = str(response.content).strip()
+                else:
+                    content = str(response).strip()
+                    
+                result = json.loads(content)
+                return self._validate_extraction_result(result)
+            except json.JSONDecodeError as e:
+                self.logger.warning(f"Failed to parse OpenAI JSON response: {e}, using fallback")
+                return self._fallback_extraction(text)
+                
+        except Exception as e:
+            self.logger.error(f"Research focus extraction failed: {e}")
+            return self._fallback_extraction(text)
+    
+    def _validate_extraction_result(self, result: Dict) -> Dict[str, Any]:
+        """Validate and clean extraction result"""
+        return {
+            "topic": str(result.get("topic", "Research Topic"))[:200],
+            "keywords": [str(kw)[:50] for kw in result.get("keywords", [])[:10]],
+            "domain": str(result.get("domain", "Computer Science"))[:100],
+            "methodologies": [str(m)[:50] for m in result.get("methodologies", [])[:5]],
+            "audience": str(result.get("audience", "graduate"))[:20]
+        }
+    
+    def _fallback_extraction(self, text: str) -> Dict[str, Any]:
+        """Fallback method when AI is not available"""
+        # Extract potential keywords using simple heuristics
+        keywords = self._extract_keywords_heuristic(text)
+        topic = self._extract_topic_heuristic(text)
+        
+        return {
+            "topic": topic,
+            "keywords": keywords,
+            "domain": "Computer Science",
+            "methodologies": ["analysis", "research"],
+            "audience": "graduate"
+        }
+    
+    def _extract_keywords_heuristic(self, text: str) -> List[str]:
+        """Extract keywords using simple heuristics"""
+        common_academic_terms = [
+            "machine learning", "artificial intelligence", "deep learning",
+            "neural networks", "data analysis", "algorithm", "optimization",
+            "classification", "regression", "clustering", "natural language processing",
+            "computer vision", "statistics", "modeling", "prediction"
+        ]
+        
+        text_lower = text.lower()
+        found_keywords = []
+        
+        for term in common_academic_terms:
+            if term in text_lower:
+                found_keywords.append(term)
+        
+        return found_keywords[:8] if found_keywords else ["artificial intelligence", "research"]
+    
+    def _extract_topic_heuristic(self, text: str) -> str:
+        """Extract topic using simple patterns"""
+        patterns = [
+            r'research on (.+?)(?:\.|,|;|\n)',
+            r'study of (.+?)(?:\.|,|;|\n)',
+            r'analysis of (.+?)(?:\.|,|;|\n)',
+            r'investigation into (.+?)(?:\.|,|;|\n)'
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return match.group(1).strip()[:200]
+        
+        return "Academic Research Topic"
+
+
+class ArxivSearcher:
+    """Search arXiv for academic papers"""
+    
+    def __init__(self):
+        self.logger = logger
+    
+    def search(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
+        """Search arXiv for papers"""
+        if not arxiv:
+            self.logger.warning("arXiv library not available")
+            return []
+        
+        try:
+            search = arxiv.Search(
+                query=query,
+                max_results=max_results,
+                sort_by=arxiv.SortCriterion.Relevance
+            )
+            
+            papers = []
+            for result in search.results():
+                paper = {
+                    "id": result.entry_id.split('/')[-1],
+                    "title": result.title,
+                    "authors": [str(author) for author in result.authors],
+                    "summary": result.summary,
+                    "url": result.entry_id,
+                    "pdf_url": result.pdf_url,
+                    "published": result.published.strftime('%Y-%m-%d') if result.published else None,
+                    "categories": result.categories,
+                    "source": "arXiv"
+                }
+                papers.append(paper)
+            
+            self.logger.info(f"Found {len(papers)} papers from arXiv")
+            return papers
+            
+        except Exception as e:
+            self.logger.error(f"arXiv search failed: {e}")
+            return []
+
+
+class SemanticScholarSearcher:
+    """Search Semantic Scholar for academic papers"""
+    
+    def __init__(self):
+        self.logger = logger
+        self.base_url = "https://api.semanticscholar.org/graph/v1/paper/search"
+    
+    def search(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
+        """Search Semantic Scholar for papers"""
+        try:
+            params = {
+                'query': query,
+                'limit': min(max_results, 100),  # API limit
+                'fields': 'title,authors,abstract,url,year,citationCount,publicationDate,journal'
+            }
+            
+            response = requests.get(
+                self.base_url, 
+                params=params, 
+                timeout=config.REQUEST_TIMEOUT
+            )
+            response.raise_for_status()
+            
+            data = response.json()
+            papers = []
+            
+            for paper_data in data.get('data', []):
+                paper = {
+                    "id": paper_data.get('paperId', str(uuid.uuid4())),
+                    "title": paper_data.get('title', 'Unknown Title'),
+                    "authors": [author.get('name', 'Unknown') 
+                              for author in paper_data.get('authors', [])],
+                    "summary": paper_data.get('abstract', 'No abstract available'),
+                    "url": paper_data.get('url', ''),
+                    "pdf_url": paper_data.get('url', ''),
+                    "published": paper_data.get('publicationDate', ''),
+                    "citation_count": paper_data.get('citationCount', 0),
+                    "journal": paper_data.get('journal', {}).get('name', 'Unknown Journal'),
+                    "source": "Semantic Scholar"
+                }
+                papers.append(paper)
+            
+            self.logger.info(f"Found {len(papers)} papers from Semantic Scholar")
+            return papers
+            
+        except Exception as e:
+            self.logger.error(f"Semantic Scholar search failed: {e}")
+            return []
+
+
+class GoogleScholarSearcher:
+    """Search Google Scholar using web scraping"""
+    
+    def __init__(self):
+        self.logger = logger
+        self.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+    
+    def search(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
+        """Search Google Scholar with web scraping"""
+        try:
+            search_url = f"https://scholar.google.com/scholar?q={urllib.parse.quote(query)}&num={max_results}"
+            
+            response = requests.get(
+                search_url, 
+                headers=self.headers, 
+                timeout=config.REQUEST_TIMEOUT
+            )
+            
+            if response.status_code != 200:
+                self.logger.warning(f"Google Scholar returned status {response.status_code}")
+                return []
+            
+            soup = BeautifulSoup(response.content, 'html.parser')
+            papers = []
+            
+            for result in soup.find_all('div', class_='gs_r gs_or gs_scl')[:max_results]:
+                try:
+                    paper = self._parse_scholar_result(result)
+                    if paper:
+                        papers.append(paper)
+                except Exception as e:
+                    self.logger.warning(f"Failed to parse Google Scholar result: {e}")
+                    continue
+            
+            self.logger.info(f"Found {len(papers)} papers from Google Scholar")
+            return papers
+            
+        except Exception as e:
+            self.logger.error(f"Google Scholar search failed: {e}")
+            return []
+    
+    def _parse_scholar_result(self, result) -> Optional[Dict[str, Any]]:
+        """Parse individual Google Scholar search result"""
+        title_elem = result.find('h3', class_='gs_rt')
+        if not title_elem:
+            return None
+        
+        title = title_elem.get_text(strip=True)
+        
+        # Extract authors and publication info
+        authors_elem = result.find('div', class_='gs_a')
+        authors_text = authors_elem.get_text() if authors_elem else ""
+        authors = [author.strip() for author in authors_text.split('-')[0].split(',')[:5]]
+        
+        # Extract summary
+        summary_elem = result.find('span', class_='gs_rs')
+        summary = summary_elem.get_text(strip=True) if summary_elem else "No summary available"
+        
+        # Extract URL
+        link_elem = title_elem.find('a')
+        url = link_elem.get('href') if link_elem else ""
+        
+        return {
+            "id": str(uuid.uuid4()),
+            "title": title,
+            "authors": [author for author in authors if author],
+            "summary": summary,
+            "url": url,
+            "pdf_url": url,
+            "published": "",
+            "source": "Google Scholar"
+        }
+
+
+class RelevanceScorer:
+    """Score paper relevance using AI analysis"""
+    
+    def __init__(self, openai_client):
+        self.openai_client = openai_client
+        self.logger = logger
+    
+    def calculate_relevance_score(self, paper: Dict[str, Any], research_focus: Dict[str, Any]) -> float:
+        """Calculate relevance score using AI analysis"""
+        try:
+            # Validate inputs
+            if not paper or not research_focus:
+                return 25.0
+            
+            if not self.openai_client:
+                return self._heuristic_scoring(paper, research_focus)
+            
+            # Safe string formatting with defaults
+            topic = research_focus.get('topic', 'Unknown topic')
+            keywords = research_focus.get('keywords', [])
+            domain = research_focus.get('domain', 'Unknown domain')
+            
+            title = paper.get('title', 'Unknown title')
+            summary = paper.get('summary', 'No summary available')
+            authors = paper.get('authors', [])
+            
+            # Ensure all values are strings
+            keywords_str = ', '.join([str(kw) for kw in keywords if kw])
+            authors_str = ', '.join([str(auth) for auth in authors[:3] if auth])
+            
+            prompt = f"""
+            Rate the relevance of this academic paper to the research focus on a scale of 0-100.
+            
+            Research Focus:
+            - Topic: {topic}
+            - Keywords: {keywords_str}
+            - Domain: {domain}
+            
+            Paper:
+            - Title: {title}
+            - Summary: {str(summary)[:400]}
+            - Authors: {authors_str}
+            
+            Consider:
+            1. Topic alignment (40 points)
+            2. Keyword matches (30 points)  
+            3. Methodological relevance (20 points)
+            4. Recency and impact (10 points)
+            
+            Respond with only a number between 0-100.
+            """
+            
+            response = self.openai_client.invoke(prompt)
+            
+            # Extract score from response
+            if hasattr(response, 'content'):
+                score_text = str(response.content).strip()
+            else:
+                score_text = str(response).strip()
+                
+            try:
+                score_match = re.search(r'\d+\.?\d*', score_text)
+                if score_match:
+                    score = float(score_match.group())
+                    return min(100, max(0, score))
+                else:
+                    return self._heuristic_scoring(paper, research_focus)
+            except:
+                return self._heuristic_scoring(paper, research_focus)
+                
+        except Exception as e:
+            self.logger.error(f"Relevance scoring failed: {e}")
+            return self._heuristic_scoring(paper, research_focus)
+    
+    def _heuristic_scoring(self, paper: Dict[str, Any], research_focus: Dict[str, Any]) -> float:
+        """Fallback heuristic scoring when AI is not available"""
+        try:
+            score = 50.0  # Base score
+            
+            # Safe string handling with None checks
+            title = str(paper.get('title', '')).lower() if paper.get('title') else ''
+            summary = str(paper.get('summary', '')).lower() if paper.get('summary') else ''
+            
+            # Safe keyword processing
+            raw_keywords = research_focus.get('keywords', []) if research_focus else []
+            keywords = [str(kw).lower() for kw in raw_keywords if kw is not None and str(kw).strip()]
+            
+            # Keyword matching in title (high weight)
+            title_matches = sum(1 for kw in keywords if kw and kw in title)
+            score += title_matches * 15
+            
+            # Keyword matching in summary (medium weight)
+            summary_matches = sum(1 for kw in keywords if kw and kw in summary)
+            score += summary_matches * 5
+            
+            # Citation count bonus (if available)
+            try:
+                citation_count = int(paper.get('citation_count', 0))
+                if citation_count > 100:
+                    score += 10
+                elif citation_count > 50:
+                    score += 5
+            except (ValueError, TypeError):
+                pass  # Ignore invalid citation counts
+            
+            return min(100, max(0, score))
+            
+        except Exception as e:
+            self.logger.error(f"Heuristic scoring failed: {e}")
+            return 50.0  # Safe fallback
+
+
+class DuplicateRemover:
+    """Remove duplicate papers based on title similarity"""
+    
+    def __init__(self, threshold: float = 0.85):
+        self.threshold = threshold
+        self.logger = logger
+    
+    def remove_duplicates(self, papers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Remove duplicate papers based on title similarity"""
+        if not papers:
+            return papers
+        
+        unique_papers = []
+        seen_titles = []
+        
+        for paper in papers:
+            if not paper or not isinstance(paper, dict):
+                continue
+                
+            title = paper.get('title')
+            if not title:
+                continue
+                
+            title = str(title).lower().strip()
+            if not title:
+                continue
+                
+            is_duplicate = False
+            
+            for seen_title in seen_titles:
+                try:
+                    similarity = fuzz.ratio(title, seen_title) / 100.0
+                    if similarity >= self.threshold:
+                        is_duplicate = True
+                        # Keep the one with higher citation count or more complete info
+                        existing_index = seen_titles.index(seen_title)
+                        if self._is_better_paper(paper, unique_papers[existing_index]):
+                            unique_papers[existing_index] = paper
+                        break
+                except Exception as e:
+                    self.logger.warning(f"Error comparing titles: {e}")
+                    continue
+            
+            if not is_duplicate:
+                unique_papers.append(paper)
+                seen_titles.append(title)
+        
+        self.logger.info(f"Removed {len(papers) - len(unique_papers)} duplicate papers")
+        return unique_papers
+    
+    def _is_better_paper(self, paper1: Dict, paper2: Dict) -> bool:
+        """Determine which paper is better (more complete/authoritative)"""
+        # Prefer papers with citation counts
+        citations1 = paper1.get('citation_count', 0)
+        citations2 = paper2.get('citation_count', 0)
+        
+        if citations1 != citations2:
+            return citations1 > citations2
+        
+        # Prefer papers with more complete summaries
+        summary1_len = len(paper1.get('summary', ''))
+        summary2_len = len(paper2.get('summary', ''))
+        
+        return summary1_len > summary2_len
+
+
+class PDFAnalyzer:
+    """Analyze PDF files to extract research content"""
+    
+    def __init__(self, research_extractor: ResearchFocusExtractor):
+        self.research_extractor = research_extractor
+        self.logger = logger
+    
+    def extract_text_from_pdf(self, pdf_path: str) -> str:
+        """Extract text from PDF file"""
+        try:
+            doc = fitz.open(pdf_path)
+            text = ""
+            
+            # Extract text from all pages
+            for page_num in range(min(len(doc), 10)):  # Limit to first 10 pages
+                page = doc.load_page(page_num)
+                text += page.get_text()
+            
+            doc.close()
+            return text
+            
+        except Exception as e:
+            self.logger.error(f"PDF text extraction failed: {e}")
+            return ""
+    
+    def analyze_research_paper(self, pdf_path: str) -> Dict[str, Any]:
+        """Analyze uploaded research paper"""
+        try:
+            text = self.extract_text_from_pdf(pdf_path)
+            
+            if not text or len(text) < 100:
+                return {"success": False, "error": "Could not extract meaningful text from PDF"}
+            
+            # Extract research focus
+            research_focus = self.research_extractor.extract_research_focus(text)
+            
+            return {
+                "success": True,
+                "research_focus": research_focus,
+                "text_length": len(text),
+                "extracted_sample": text[:500] + "..." if len(text) > 500 else text
+            }
+            
+        except Exception as e:
+            self.logger.error(f"PDF analysis failed: {e}")
+            return {"success": False, "error": str(e)}
+
+
+class AcademicPaperDiscoveryEngine:
+    """Main engine for discovering academic papers"""
+    
     def __init__(self):
         self.logger = logger
         
-    def extract_structured_content(self, pdf_path):
-        """Extract PDF content with structure preservation"""
+        # Initialize components
+        self.research_extractor = ResearchFocusExtractor(openai_client)
+        self.arxiv_searcher = ArxivSearcher()
+        self.semantic_searcher = SemanticScholarSearcher()
+        self.scholar_searcher = GoogleScholarSearcher()
+        self.relevance_scorer = RelevanceScorer(openai_client)
+        self.duplicate_remover = DuplicateRemover(config.DUPLICATE_THRESHOLD)
+        self.pdf_analyzer = PDFAnalyzer(self.research_extractor)
+        
+        self.logger.info("Academic Paper Discovery Engine initialized")
+    
+    def discover_papers(self, research_input: str, sources: List[str] = None, 
+                       max_results: int = 10) -> Dict[str, Any]:
+        """Main method to discover relevant academic papers"""
         try:
-            doc = pymupdf.open(pdf_path)
-            structured_content = []
+            if sources is None:
+                sources = ["arxiv", "semantic_scholar"]
             
-            for page_num in range(len(doc)):
-                page = doc.load_page(page_num)
-                page_content = self.extract_page_structure(page, page_num + 1)
-                structured_content.extend(page_content)
+            max_results = min(max_results, config.MAX_ALLOWED_RESULTS)
             
-            doc.close()
-            return structured_content
+            self.logger.info(f"Starting paper discovery for query: {research_input[:100]}...")
+            
+            # Extract research focus
+            research_focus = self.research_extractor.extract_research_focus(research_input)
+            
+            # Create search query
+            query_parts = [research_focus['topic']]
+            query_parts.extend(research_focus['keywords'][:5])
+            search_query = ' '.join(query_parts)
+            
+            self.logger.info(f"Search query: {search_query}")
+            
+            # Search multiple sources concurrently
+            all_papers = []
+            with ThreadPoolExecutor(max_workers=config.MAX_WORKERS) as executor:
+                futures = []
+                
+                if "arxiv" in sources:
+                    futures.append(executor.submit(self.arxiv_searcher.search, search_query, max_results))
+                
+                if "semantic_scholar" in sources:
+                    futures.append(executor.submit(self.semantic_searcher.search, search_query, max_results))
+                
+                if "google_scholar" in sources:
+                    futures.append(executor.submit(self.scholar_searcher.search, search_query, max_results))
+                
+                # Collect results
+                for future in as_completed(futures):
+                    try:
+                        papers = future.result()
+                        all_papers.extend(papers)
+                    except Exception as e:
+                        self.logger.error(f"Search source failed: {e}")
+            
+            # Remove duplicates
+            unique_papers = self.duplicate_remover.remove_duplicates(all_papers)
+            
+            # Calculate relevance scores with error handling
+            for paper in unique_papers:
+                try:
+                    if paper and isinstance(paper, dict):
+                        paper['relevance_score'] = self.relevance_scorer.calculate_relevance_score(
+                            paper, research_focus
+                        )
+                    else:
+                        paper['relevance_score'] = 25.0  # Default score
+                except Exception as e:
+                    self.logger.warning(f"Failed to score paper: {e}")
+                    paper['relevance_score'] = 25.0  # Default score
+            
+            # Sort by relevance score safely
+            try:
+                unique_papers.sort(key=lambda x: float(x.get('relevance_score', 0)), reverse=True)
+            except Exception as e:
+                self.logger.warning(f"Failed to sort papers: {e}")
+                # Keep original order if sorting fails
+            
+            # Limit final results
+            final_papers = unique_papers[:max_results]
+            
+            result = {
+                "success": True,
+                "research_focus": research_focus,
+                "papers": final_papers,
+                "total_found": len(all_papers),
+                "unique_papers": len(unique_papers),
+                "final_count": len(final_papers),
+                "sources_searched": sources,
+                "search_query": search_query
+            }
+            
+            self.logger.info(f"Discovery completed: {len(final_papers)} papers returned")
+            return result
             
         except Exception as e:
-            self.logger.error(f"PDF extraction failed: {str(e)}")
-            return []
-    
-    def extract_page_structure(self, page, page_num):
-        """Extract structured content from a single page"""
-        page_content = []
-        
-        # Get text blocks with position information
-        text_dict = page.get_text("dict")
-        
-        current_section = None
-        paragraph_count = 0
-        
-        for block in text_dict["blocks"]:
-            if "lines" in block:
-                # Process text blocks
-                block_text = ""
-                block_bbox = block["bbox"]
-                
-                for line in block["lines"]:
-                    line_text = ""
-                    for span in line["spans"]:
-                        line_text += span["text"]
-                    block_text += line_text + "\n"
-                
-                block_text = block_text.strip()
-                if not block_text:
-                    continue
-                
-                # Classify content type and extract structure
-                content_info = self.classify_content(block_text, block_bbox)
-                
-                if content_info["type"] == "heading":
-                    current_section = block_text
-                elif content_info["type"] == "paragraph":
-                    paragraph_count += 1
-                    
-                    # Create structured content entry
-                    page_content.append({
-                        "text": block_text,
-                        "page": page_num,
-                        "section": current_section or "Content",
-                        "paragraph_id": paragraph_count,
-                        "content_type": content_info["type"],
-                        "bbox": list(block_bbox),  # [x0, y0, x1, y1]
-                        "start_char": len("\n".join([c["text"] for c in page_content])),
-                        "end_char": len("\n".join([c["text"] for c in page_content])) + len(block_text),
-                        "font_size": content_info["font_size"],
-                        "is_bold": content_info["is_bold"]
-                    })
-        
-        return page_content
-    
-    def classify_content(self, text, bbox):
-        """Classify content type based on text and formatting"""
-        # Simple heuristics for content classification
-        lines = text.split('\n')
-        first_line = lines[0].strip() if lines else ""
-        
-        # Check for headings
-        if (len(first_line) < 100 and 
-            (first_line.isupper() or 
-             any(keyword in first_line.lower() for keyword in [
-                 'introduction', 'method', 'result', 'conclusion', 'discussion',
-                 'abstract', 'summary', 'background', 'literature', 'analysis',
-                 'findings', 'recommendation', 'overview', 'chapter', 'section'
-             ]) or
-             len(first_line.split()) <= 6)):
+            self.logger.error(f"Paper discovery failed: {e}")
             return {
-                "type": "heading",
-                "font_size": 12,  # Default, could be extracted from spans
-                "is_bold": True
+                "success": False,
+                "error": str(e),
+                "papers": []
             }
-        
-        return {
-            "type": "paragraph",
-            "font_size": 10,
-            "is_bold": False
-        }
-
-# Initialize the PDF processor
-pdf_processor = StructureAwarePDFProcessor()
-
-def filter_metadata_for_chromadb(metadata):
-    """Filter metadata to only include types ChromaDB accepts: str, int, float, bool"""
-    filtered = {}
-    for key, value in metadata.items():
-        if isinstance(value, (str, int, float, bool)):
-            filtered[key] = value
-        elif isinstance(value, list):
-            # Convert lists to strings for ChromaDB compatibility
-            filtered[f"{key}_string"] = ",".join(map(str, value))
-        else:
-            # Convert other types to string
-            filtered[key] = str(value)
-    return filtered
-
-def reconstruct_bbox_from_metadata(metadata):
-    """Reconstruct bbox coordinates from ChromaDB metadata"""
-    try:
-        if "bbox_string" in metadata:
-            coords = metadata["bbox_string"].split(",")
-            return [float(coord) for coord in coords]
-        elif all(key in metadata for key in ["bbox_x0", "bbox_y0", "bbox_x1", "bbox_y1"]):
-            return [
-                metadata["bbox_x0"],
-                metadata["bbox_y0"], 
-                metadata["bbox_x1"],
-                metadata["bbox_y1"]
-            ]
-        else:
-            return None
-    except (ValueError, KeyError):
-        return None
-
-def update_processing_status(doc_id, status, progress=0, message=""):
-    """Thread-safe status update"""
-    with status_lock:
-        processing_status[doc_id] = {
-            "status": status,  # "processing", "completed", "failed"
-            "progress": progress,  # 0-100
-            "message": message,
-            "timestamp": time.time()
-        }
-
-def process_pdf_async(pdf_path, doc_id, filename):
-    """Background PDF processing function with structure preservation"""
-    try:
-        update_processing_status(doc_id, "processing", 10, "Loading PDF...")
-        
-        # Extract structured content using PyMuPDF
-        structured_content = pdf_processor.extract_structured_content(pdf_path)
-        
-        if not structured_content:
-            update_processing_status(doc_id, "failed", 0, "No content extracted from PDF")
-            return
-        
-        update_processing_status(doc_id, "processing", 30, "Processing structured content...")
-        
-        # Process in chunks with progress updates
-        total_chunks = len(range(0, len(structured_content), CHUNK_SIZE))
-        processed_chunks = 0
-        
-        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            futures = []
-            
-            for chunk_idx, i in enumerate(range(0, len(structured_content), CHUNK_SIZE)):
-                future = executor.submit(
-                    process_structured_chunk,
-                    content_chunk=structured_content[i:i + CHUNK_SIZE],
-                    doc_id=doc_id,
-                    filename=filename,
-                    start_idx=i
-                )
-                futures.append(future)
-            
-            # Process results with progress updates
-            for future in as_completed(futures):
-                future.result()  # This will raise exception if processing failed
-                processed_chunks += 1
-                progress = 30 + int((processed_chunks / total_chunks) * 60)  # 30-90%
-                update_processing_status(doc_id, "processing", progress, 
-                                       f"Processing chunk {processed_chunks}/{total_chunks}...")
-        
-        update_processing_status(doc_id, "completed", 100, "Document ready!")
-        logger.info(f"Successfully processed document {doc_id}")
-        
-    except Exception as e:
-        update_processing_status(doc_id, "failed", 0, f"Processing failed: {str(e)}")
-        logger.error(f"Failed to process document {doc_id}: {str(e)}", exc_info=True)
-    finally:
-        # Clean up temp file
-        if os.path.exists(pdf_path):
-            os.remove(pdf_path) 
-
-@app.route('/summary', methods=['POST'])
-def generate_summary():
-    doc_id = request.json.get("doc_id")
     
-    if not doc_id:
-        return jsonify({"error": "Document ID is required"}), 400
-
-    try:
-        # Use the summarize_pdf function
-        summary_result = summarize_pdf(doc_id)
-        
-        if not summary_result:
-            return jsonify({"error": "No content found for this document"}), 404
-        
-        return jsonify({
-            "answer": summary_result.get('summary', 'No summary available')
-        })
-
-    except Exception as e:
-        logger.error(f"Error in generate_summary: {str(e)}", exc_info=True)
-        return jsonify({"error": f"Summarization failed: {str(e)}"}), 500
-    
-# @app.route('/save', methods=['POST'])
-# def save_summary():
-#     doc_id = request.json.get("doc_id")
-#     summary = request.json.get("summary")  # Expect a single summary string
-#     if not doc_id or not summary:
-#         return jsonify({"error": "Document ID and summary are required"}), 400
-
-#     try:
-#         # Save the edited summary back to the database or storage
-#         retriever.save_summary(doc_id, summary)
-#         return jsonify({"status": "success", "message": "Summary saved successfully"})
-#     except Exception as e:
-#         return jsonify({"error": str(e)}), 500
-
-# Remove unused extract_section_heading function - now handled by StructureAwarePDFProcessor
-
-def process_structured_chunk(content_chunk, doc_id, filename, start_idx):
-    """Enhanced chunk processor with structure preservation and ChromaDB compatibility"""
-    texts = []
-    metadatas = []
-    ids = []
-    
-    for i, content_item in enumerate(content_chunk, start=start_idx):
-        # Use the structured content directly
-        text = content_item["text"]
-        
-        # Convert bbox list to string for ChromaDB compatibility
-        bbox_coords = content_item["bbox"]
-        bbox_string = f"{bbox_coords[0]},{bbox_coords[1]},{bbox_coords[2]},{bbox_coords[3]}"
-        
-        texts.append(text)
-        
-        # Create metadata with only primitive types
-        raw_metadata = {
-            "doc_id": doc_id,
-            "source": secure_filename(filename),
-            "page": content_item["page"],
-            "section": content_item["section"],
-            "section_heading": content_item["section"],  # For backward compatibility
-            "paragraph_id": content_item["paragraph_id"],
-            "content_type": content_item["content_type"],
-            "bbox_string": bbox_string,  # Convert list to string
-            "bbox_x0": float(bbox_coords[0]),  # Individual bbox coordinates
-            "bbox_y0": float(bbox_coords[1]),
-            "bbox_x1": float(bbox_coords[2]),
-            "bbox_y1": float(bbox_coords[3]),
-            "start_char": content_item["start_char"],
-            "end_char": content_item["end_char"],
-            "chunk": i,
-            "upload_time": time.time(),
-            "text_length": len(text),
-            "font_size": float(content_item["font_size"]),
-            "is_bold": bool(content_item["is_bold"])
-        }
-        
-        # Filter out any complex metadata that ChromaDB can't handle
-        filtered_metadata = filter_metadata_for_chromadb(raw_metadata)
-        metadatas.append(filtered_metadata)
-        ids.append(f"{doc_id}-{i}")
-    
-    # Thread-safe batch insert
-    with chroma_lock:
-        retriever.index_document(
-            texts=texts,
-            metadatas=metadatas,
-            ids=ids
-        )
-    
-    return len(texts)
-
-@app.route('/upload', methods=['POST'])
-def upload_file():
-    """Upload file and start background processing"""
-    if 'file' not in request.files:
-        return jsonify({"error": "No file provided"}), 400
-    
-    pdf_file = request.files['file']
-    if not pdf_file.filename.lower().endswith('.pdf'):
-        return jsonify({"error": "Only PDF files are supported"}), 400
-
-    try:
-        # Generate doc_id immediately
-        doc_id = str(uuid.uuid4())
-        
-        # Save file to temp directory
-        temp_path = os.path.join(TEMP_DIR, f"{doc_id}.pdf")
-        pdf_file.save(temp_path)
-        
-        # Initialize processing status
-        update_processing_status(doc_id, "processing", 5, "File uploaded, starting processing...")
-        
-        # Start background processing
-        processing_thread = threading.Thread(
-            target=process_pdf_async,
-            args=(temp_path, doc_id, pdf_file.filename)
-        )
-        processing_thread.daemon = True
-        processing_thread.start()
-        
-        # Return immediately with doc_id
-        return jsonify({
-            "status": "accepted",
-            "doc_id": doc_id,
-            "message": "File uploaded successfully. Processing started in background."
-        }), 202  # HTTP 202: Accepted (processing started)
-        
-    except Exception as e:
-        logger.exception("Upload failed")
-        return jsonify({"error": "Upload failed"}), 500
+    def analyze_uploaded_paper(self, pdf_path: str) -> Dict[str, Any]:
+        """Analyze uploaded paper and find similar research"""
+        return self.pdf_analyzer.analyze_research_paper(pdf_path)
 
 
+# Initialize the discovery engine
+discovery_engine = AcademicPaperDiscoveryEngine()
 
 
-
-@app.route('/status', methods=['GET'])
-def get_all_statuses():
-    """Get status of all processing documents"""
-    with status_lock:
-        all_statuses = processing_status.copy()
-    
-    return jsonify(all_statuses)
-
-@app.route('/')
-def app_status():
-    """Check the status of the application"""
-    response = {
-        "connectionStatus": "Connected",
-        "status": "healthy"
-    }
-    return jsonify(response)
-
-@app.route('/health')
+# API Routes
+@app.route('/api/health', methods=['GET'])
 def health_check():
-    """Health check endpoint for React frontend"""
+    """Health check endpoint"""
+    return jsonify({
+        "status": "healthy",
+        "service": "Academic Paper Discovery Engine",
+        "timestamp": datetime.now().isoformat(),
+        "openai_available": openai_client is not None,
+        "arxiv_available": arxiv is not None
+    })
+
+
+@app.route('/api/discover-papers', methods=['POST'])
+def discover_papers():
+    """Discover relevant academic papers based on research query"""
     try:
-        # You could add more health checks here (database, etc.)
-        return jsonify({
-            "status": "healthy",
-            "message": "Backend is running properly"
-        }), 200
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"success": False, "error": "No data provided"}), 400
+        
+        research_query = data.get('query', '').strip()
+        if not research_query:
+            return jsonify({"success": False, "error": "Research query is required"}), 400
+        
+        sources = data.get('sources', ['arxiv', 'semantic_scholar'])
+        max_results = min(data.get('max_results', config.DEFAULT_MAX_RESULTS), config.MAX_ALLOWED_RESULTS)
+        
+        # Validate sources
+        valid_sources = ['arxiv', 'semantic_scholar', 'google_scholar']
+        sources = [s for s in sources if s in valid_sources]
+        
+        if not sources:
+            return jsonify({"success": False, "error": "No valid sources specified"}), 400
+        
+        # Discover papers
+        result = discovery_engine.discover_papers(research_query, sources, max_results)
+        
+        return jsonify(result)
+        
     except Exception as e:
-        return jsonify({
-            "status": "unhealthy", 
-            "error": str(e)
-        }), 500
+        logger.error(f"Paper discovery endpoint failed: {e}")
+        return jsonify({"success": False, "error": "Internal server error"}), 500
 
-@app.route('/question', methods=['POST'])
-def ask_question_endpoint():
-    question = request.json.get("question")
-    doc_id = request.json.get("doc_id")
 
-    if not question:
-        return jsonify({"error": "Question is required"}), 400
-
-    if not doc_id:
-        return jsonify({"error": "Document ID is required"}), 400
-
+@app.route('/api/upload-paper', methods=['POST'])
+def upload_paper():
+    """Upload and analyze a research paper to find similar papers"""
     try:
-        # Create filter criteria for doc_id
-        filter_criteria = {"doc_id": doc_id}
+        if 'file' not in request.files:
+            return jsonify({"success": False, "error": "No file uploaded"}), 400
         
-        # Use the enhanced query method for source attribution
-        query_result = retriever.query_with_sources(question, filter_criteria=filter_criteria, top_k=5)
-
-        if not query_result['sources']:
-            return jsonify({"error": "No matching content found"}), 404
-
-        # Format context for AI prompt with enhanced source details
-        context_parts = []
-        sources_for_response = []
-
-        for i, source in enumerate(query_result['sources'], 1):
-            # Build source information string
-            source_info = f"[Source {i}] {source['filename']}"
-            
-            # Add page information if available
-            if source.get('page') and source['page'] != "Unknown":
-                source_info += f" (Page {source['page']})"
-            
-            # Add section heading if available and not "Unknown"
-            if source.get('section_heading') and source['section_heading'] not in ["Unknown", None]:
-                source_info += f" - Section: {source['section_heading']}"
-            
-            # Create formatted context entry
-            context_entry = f"{source_info}\nContent: {source['text']}"
-            context_parts.append(context_entry)
-            
-            # Prepare source for response (with snippet for display)
-            source_snippet = source['text'][:200] + "..." if len(source['text']) > 200 else source['text']
-            
-            sources_for_response.append({
-                "source_id": i,
-                "filename": source['filename'],
-                "page": source['page'] if source['page'] != "Unknown" else None,
-                "section_heading": source['section_heading'] if source['section_heading'] != "Unknown" else None,
-                "snippet": source_snippet,
-                "doc_id": source['doc_id'],
-                "chunk_id": source.get('chunk_id', 'Unknown')
-            })
-
-        context = "\n\n".join(context_parts)
-
-        # Enhanced AI prompt that encourages source referencing
-        prompt = f"""Answer the question using ONLY the following context from the uploaded documents.
-        If the answer cannot be found in the context, please say so.
-        When providing your answer, reference the specific sources (e.g., "According to Source 1..." or "As shown in Source 2...").
-
-        Context:
-        {context}
-
-        Question: {question}
-
-        Please provide a comprehensive answer and clearly indicate which sources support your statements."""
-
-        # Generate answer with enhanced context
-        answer = ChatOpenAI(model="gpt-3.5-turbo").invoke(prompt).content
-
-        logger.info(f"Generated answer with {len(query_result['sources'])} sources")
-
-        return jsonify({
-            "answer": answer,
-            "sources": sources_for_response,
-            "metadata": {
-                "total_sources": len(query_result['sources']),
-                "query_time": query_result.get('query_time', 0)
-            }
-        })
-
-    except Exception as e:
-        logger.error(f"Error in ask_question: {str(e)}", exc_info=True)
-        return jsonify({"error": f"Question processing failed: {str(e)}"}), 500
-
-@app.route('/ask', methods=['POST'])
-def ask_question():
-    # Keep the original /ask endpoint for backward compatibility
-    return ask_question_endpoint()
-
-@app.route('/analyze-paper/<doc_id>', methods=['POST'])
-def analyze_paper(doc_id):
-    """Academic paper structure analysis"""
-    try:
-        # Get all document chunks for analysis
-        filter_criteria = {"doc_id": doc_id}
-        all_chunks = retriever.query_with_sources("", filter_criteria=filter_criteria, top_k=50)
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"success": False, "error": "No file selected"}), 400
         
-        if not all_chunks['sources']:
-            return jsonify({"error": "Document not found or not processed"}), 404
+        if not file.filename.lower().endswith('.pdf'):
+            return jsonify({"success": False, "error": "Only PDF files are supported"}), 400
         
-        # Combine all text for analysis
-        full_text = " ".join([chunk['text'] for chunk in all_chunks['sources'][:10]])  # First 10 chunks
+        # Save uploaded file
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(config.TEMP_DIR, f"{uuid.uuid4()}_{filename}")
+        file.save(filepath)
         
-        # AI analysis for paper structure
-        analysis_prompt = f"""Analyze this academic paper and provide:
-        1. Research Focus (one sentence)
-        2. Paper Type (Empirical Study, Literature Review, Case Study, etc.)
-        3. Main Research Question
-        4. Key Findings (3-4 bullet points)
-        5. Methodology Used
-        6. Main Contributions to the field
-        
-        Text: {full_text[:3000]}
-        
-        Format as JSON with keys: research_focus, paper_type, research_question, key_findings, methodology, contributions"""
-        
-        analysis = ChatOpenAI(model="gpt-3.5-turbo").invoke(analysis_prompt).content
-        
-        # Try to parse as JSON, fallback to text
         try:
-            import json
-            analysis_data = json.loads(analysis)
-        except:
-            analysis_data = {"raw_analysis": analysis}
+            # Analyze the uploaded paper
+            analysis_result = discovery_engine.analyze_uploaded_paper(filepath)
+            
+            if not analysis_result.get('success'):
+                return jsonify(analysis_result), 400
+            
+            # Create research query from analysis
+            research_focus = analysis_result['research_focus']
+            research_query = f"{research_focus['topic']} {' '.join(research_focus['keywords'][:5])}"
+            
+            # Get parameters from form data
+            sources = request.form.get('sources', 'arxiv,semantic_scholar').split(',')
+            max_results = min(int(request.form.get('max_results', config.DEFAULT_MAX_RESULTS)), 
+                            config.MAX_ALLOWED_RESULTS)
+            
+            # Find similar papers
+            discovery_result = discovery_engine.discover_papers(research_query, sources, max_results)
+            
+            # Combine results
+            result = {
+                "success": True,
+                "uploaded_paper_analysis": analysis_result['research_focus'],
+                "similar_papers": discovery_result
+            }
+            
+            return jsonify(result)
+            
+        finally:
+            # Clean up uploaded file
+            if os.path.exists(filepath):
+                try:
+                    os.remove(filepath)
+                except:
+                    pass  # Ignore cleanup errors
         
-        # Add section information
-        sections = {}
-        for chunk in all_chunks['sources']:
-            section = chunk.get('section_heading', 'Content')
-            page = chunk.get('page', 'Unknown')
-            if section not in sections:
-                sections[section] = []
-            if page not in sections[section]:
-                sections[section].append(page)
+    except Exception as e:
+        logger.error(f"Paper upload endpoint failed: {e}")
+        return jsonify({"success": False, "error": "Internal server error"}), 500
+
+
+@app.route('/api/download-paper', methods=['POST'])
+def download_paper():
+    """Download and analyze a paper from provided URL"""
+    try:
+        data = request.get_json()
+        if not data or 'url' not in data:
+            return jsonify({"success": False, "error": "Paper URL is required"}), 400
         
-        analysis_data['document_structure'] = {
-            "sections": sections,
-            "total_pages": len(set([c.get('page', 0) for c in all_chunks['sources']])),
-            "total_chunks": len(all_chunks['sources'])
+        paper_url = data['url']
+        
+        # Validate URL
+        if not paper_url.startswith(('http://', 'https://')):
+            return jsonify({"success": False, "error": "Invalid URL"}), 400
+        
+        # Download the paper
+        response = requests.get(paper_url, timeout=config.REQUEST_TIMEOUT)
+        response.raise_for_status()
+        
+        # Check if it's a PDF
+        content_type = response.headers.get('content-type', '').lower()
+        if 'pdf' not in content_type and not paper_url.lower().endswith('.pdf'):
+            return jsonify({"success": False, "error": "URL does not point to a PDF file"}), 400
+        
+        # Save to temp file
+        temp_filename = f"{uuid.uuid4()}_downloaded_paper.pdf"
+        temp_filepath = os.path.join(config.TEMP_DIR, temp_filename)
+        
+        with open(temp_filepath, 'wb') as f:
+            f.write(response.content)
+        
+        try:
+            # Analyze the downloaded paper
+            analysis_result = discovery_engine.analyze_uploaded_paper(temp_filepath)
+            
+            return jsonify(analysis_result)
+            
+        finally:
+            # Clean up downloaded file
+            if os.path.exists(temp_filepath):
+                try:
+                    os.remove(temp_filepath)
+                except:
+                    pass  # Ignore cleanup errors
+        
+    except requests.RequestException as e:
+        logger.error(f"Paper download failed: {e}")
+        return jsonify({"success": False, "error": "Failed to download paper"}), 500
+    except Exception as e:
+        logger.error(f"Paper download endpoint failed: {e}")
+        return jsonify({"success": False, "error": "Internal server error"}), 500
+
+
+@app.route('/api/sources', methods=['GET'])
+def get_available_sources():
+    """Get list of available paper sources"""
+    sources = [
+        {
+            "id": "arxiv", 
+            "name": "arXiv", 
+            "description": "Open access repository of scientific papers",
+            "available": arxiv is not None
+        },
+        {
+            "id": "semantic_scholar", 
+            "name": "Semantic Scholar", 
+            "description": "AI-powered research tool for academic papers",
+            "available": True
+        },
+        {
+            "id": "google_scholar", 
+            "name": "Google Scholar", 
+            "description": "Web search for scholarly literature",
+            "available": True
         }
-        
-        return jsonify(analysis_data)
-        
-    except Exception as e:
-        logger.error(f"Paper analysis failed: {str(e)}")
-        return jsonify({"error": f"Analysis failed: {str(e)}"}), 500
-
-@app.route('/research-questions/<doc_id>', methods=['POST'])
-def generate_research_questions(doc_id):
-    """Generate academic research questions"""
-    try:
-        # Get document overview
-        filter_criteria = {"doc_id": doc_id}
-        overview = retriever.query_with_sources("abstract introduction conclusion", filter_criteria=filter_criteria, top_k=5)
-        
-        if not overview['sources']:
-            return jsonify({"error": "Document not found"}), 404
-        
-        context = " ".join([source['text'] for source in overview['sources']])
-        
-        questions_prompt = f"""Based on this academic paper, generate 8 research questions that would help a student/researcher understand:
-
-        1. The main argument and thesis
-        2. The methodology and approach  
-        3. The key findings and results
-        4. The implications and significance
-        5. The limitations and criticisms
-        6. The relationship to existing literature
-        7. Future research directions
-        8. Practical applications
-
-        Context: {context[:2000]}
-
-        Format as a numbered list with brief explanations of why each question is important."""
-        
-        questions = ChatOpenAI(model="gpt-3.5-turbo").invoke(questions_prompt).content
-        
-        return jsonify({
-            "questions": questions,
-            "doc_id": doc_id,
-            "generated_at": int(time.time())
-        })
-        
-    except Exception as e:
-        return jsonify({"error": f"Question generation failed: {str(e)}"}), 500
-
-@app.route('/status/<doc_id>', methods=['GET'])
-def get_processing_status(doc_id):
-    """Get processing status for a document"""
-    try:
-        with status_lock:
-            if doc_id in processing_status:
-                return jsonify(processing_status[doc_id])
-            else:
-                return jsonify({
-                    "status": "not_found",
-                    "progress": 0,
-                    "message": "Document not found or not being processed",
-                    "timestamp": time.time()
-                }), 404
-    except Exception as e:
-        logger.error(f"Status check failed for {doc_id}: {str(e)}")
-        return jsonify({"error": f"Status check failed: {str(e)}"}), 500
-
-@app.route('/ask-with-quotes', methods=['POST'])
-def ask_with_supporting_quotes():
-    """Ask a question and get answer with supporting quotes from the document"""
-    try:
-        data = request.json
-        question = data.get('question', '')
-        doc_id = data.get('doc_id')
-        
-        if not question or not doc_id:
-            return jsonify({"error": "Question and document ID required"}), 400
-        
-        logger.info(f"Ask with quotes: '{question}' in doc {doc_id}")
-        
-        # Get AI answer first
-        filter_criteria = {"doc_id": doc_id}
-        query_result = retriever.query_with_sources(question, filter_criteria=filter_criteria, top_k=5)
-        
-        if not query_result['sources']:
-            return jsonify({
-                "answer": "I couldn't find information to answer this question in the document.",
-                "supporting_quotes": [],
-                "confidence": 0
-            })
-        
-        # Build context for AI
-        context_parts = []
-        all_sources = []
-        
-        for i, source in enumerate(query_result['sources'], 1):
-            context_parts.append(f"[Source {i}] {source['text']}")
-            all_sources.append(source)
-        
-        context = "\n\n".join(context_parts)
-        
-        # Get AI answer
-        prompt = f"""Answer the question using ONLY the following context from the document.
-        Be specific and factual. If the answer cannot be found, say so.
-        
-        Context:
-        {context}
-        
-        Question: {question}
-        
-        Answer:"""
-        
-        ai_response = ChatOpenAI(model="gpt-3.5-turbo", temperature=0).invoke(prompt).content
-        
-        # Find supporting quotes by extracting key phrases from AI answer
-        supporting_quotes = find_supporting_quotes_for_answer(ai_response, all_sources)
-        
-        # Calculate confidence based on number of supporting quotes
-        confidence = min(len(supporting_quotes) * 25, 100)  # 25% per quote, max 100%
-        
-        response_data = {
-            "question": question,
-            "answer": ai_response,
-            "supporting_quotes": supporting_quotes,
-            "confidence": confidence,
-            "total_sources_used": len(all_sources)
-        }
-        
-        logger.info(f"Ask with quotes completed: {len(supporting_quotes)} quotes found")
-        return jsonify(response_data)
-        
-    except Exception as e:
-        logger.error(f"Ask with quotes failed: {str(e)}", exc_info=True)
-        return jsonify({"error": f"Request failed: {str(e)}"}), 500
+    ]
+    
+    return jsonify({"sources": sources})
 
 
-def find_supporting_quotes_for_answer(ai_answer, sources):
-    """Find the most relevant quotes from sources that support the AI answer"""
-    import re
-    from difflib import SequenceMatcher
-    
-    # Extract key phrases from AI answer (sentences or important phrases)
-    sentences = re.split(r'[.!?]+', ai_answer.strip())
-    key_phrases = []
-    
-    for sentence in sentences:
-        sentence = sentence.strip()
-        if len(sentence) > 10:  # Skip very short sentences
-            # Extract meaningful phrases (remove common words)
-            words = sentence.lower().split()
-            meaningful_words = [w for w in words if len(w) > 3 and w not in 
-                              ['this', 'that', 'these', 'those', 'with', 'from', 'they', 'were', 'been', 'have']]
-            if len(meaningful_words) >= 2:
-                key_phrases.extend(meaningful_words[:3])  # Take first 3 meaningful words
-    
-    supporting_quotes = []
-    used_sources = set()  # Avoid duplicate sources
-    
-    # Find quotes that contain similar concepts
-    for i, source in enumerate(sources):
-        if i in used_sources or len(supporting_quotes) >= 3:  # Max 3 quotes
-            continue
-            
-        source_text = source['text'].lower()
-        match_score = 0
-        
-        # Calculate similarity score
-        for phrase in key_phrases:
-            if phrase.lower() in source_text:
-                match_score += 1
-        
-        # If we have a good match, include this as a supporting quote
-        if match_score >= 2:  # At least 2 matching concepts
-            # Find the most relevant sentence in the source
-            source_sentences = re.split(r'[.!?]+', source['text'])
-            best_sentence = ""
-            best_score = 0
-            
-            for sent in source_sentences:
-                sent = sent.strip()
-                if len(sent) > 20:  # Skip very short sentences
-                    sent_lower = sent.lower()
-                    score = sum(1 for phrase in key_phrases if phrase in sent_lower)
-                    if score > best_score:
-                        best_score = score
-                        best_sentence = sent
-            
-            if best_sentence:
-                # Reconstruct bbox from metadata if available
-                bbox = None
-                if all(key in source for key in ['bbox_x0', 'bbox_y0', 'bbox_x1', 'bbox_y1']):
-                    bbox = {
-                        "x0": source['bbox_x0'],
-                        "y0": source['bbox_y0'], 
-                        "x1": source['bbox_x1'],
-                        "y1": source['bbox_y1']
-                    }
-                
-                quote = {
-                    "text": best_sentence,
-                    "page": source.get('page', 'Unknown'),
-                    "section": source.get('section_heading', 'Content'),
-                    "confidence": min(match_score * 25, 100),  # Convert to percentage
-                    "bbox": bbox,
-                    "source_id": i
-                }
-                
-                supporting_quotes.append(quote)
-                used_sources.add(i)
-    
-    # Sort by confidence score
-    supporting_quotes.sort(key=lambda x: x['confidence'], reverse=True)
-    
-    return supporting_quotes
+# Error handlers
+@app.errorhandler(404)
+def not_found_error(error):
+    return jsonify({"success": False, "error": "Endpoint not found"}), 404
 
 
-def extract_search_terms_from_query(question):
-    """Extract meaningful search terms from natural language question"""
-    # Remove common question words
-    stop_words = {
-        'where', 'what', 'how', 'when', 'why', 'which', 'who', 'does', 'do', 'is', 'are',
-        'the', 'author', 'mention', 'discuss', 'talk', 'about', 'section', 'paragraph',
-        'paper', 'document', 'find', 'locate', 'show', 'me', 'in', 'and', 'or', 'of', 'to'
-    }
-    
-    # Extract quoted terms first
-    quoted_terms = re.findall(r'"([^"]*)"', question)
-    
-    # Extract remaining words
-    words = re.findall(r'\b\w+\b', question.lower())
-    filtered_words = [word for word in words if word not in stop_words and len(word) > 2]
-    
-    # Combine quoted terms and filtered words
-    all_terms = quoted_terms + filtered_words
-    
-    # Remove duplicates while preserving order
-    unique_terms = []
-    seen = set()
-    for term in all_terms:
-        if term not in seen:
-            unique_terms.append(term)
-            seen.add(term)
-    
-    return unique_terms[:5]  # Limit to top 5 terms
+@app.errorhandler(500)
+def internal_error(error):
+    logger.error(f"Internal server error: {error}")
+    return jsonify({"success": False, "error": "Internal server error"}), 500
 
-def find_term_occurrences_in_text(text, search_terms):
-    """Find occurrences of search terms in text with context"""
-    occurrences = []
-    text_lower = text.lower()
-    
-    for term in search_terms:
-        term_lower = term.lower()
-        start_pos = 0
-        
-        while True:
-            pos = text_lower.find(term_lower, start_pos)
-            if pos == -1:
-                break
-            
-            # Get context around the found term
-            context_start = max(0, pos - 50)
-            context_end = min(len(text), pos + len(term) + 50)
-            context = text[context_start:context_end]
-            
-            # Add ellipsis if context is truncated
-            if context_start > 0:
-                context = "..." + context
-            if context_end < len(text):
-                context = context + "..."
-            
-            # Highlight the found term in context
-            highlighted_context = re.sub(
-                f'({re.escape(term)})', 
-                r'**\1**', 
-                context, 
-                flags=re.IGNORECASE
-            )
-            
-            occurrences.append({
-                "found_term": text[pos:pos + len(term)],  # Preserve original case
-                "position": pos,
-                "context": highlighted_context,
-                "exact_match": True
-            })
-            
-            start_pos = pos + 1
-    
-    return occurrences
 
-# Clean endpoint - only essential APIs for structure-aware PDF processing remain
+@app.errorhandler(413)
+def file_too_large(error):
+    return jsonify({"success": False, "error": "File too large"}), 413
+
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    logger.info("🔬 Academic Paper Discovery Engine Starting...")
+    logger.info("=" * 60)
+    logger.info("Available endpoints:")
+    logger.info("- POST /api/discover-papers - Discover papers by research query")
+    logger.info("- POST /api/upload-paper - Upload paper to find similar research")
+    logger.info("- POST /api/download-paper - Download and analyze paper from URL")
+    logger.info("- GET /api/health - Health check")
+    logger.info("- GET /api/sources - Available search sources")
+    logger.info("=" * 60)
+    logger.info("🚀 Starting Flask development server...")
+    
+    app.run(debug=True, host='0.0.0.0', port=5000)

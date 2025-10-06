@@ -29,11 +29,11 @@ const Header = ({ connectionStatus }) => {
       <div className="header-container">
         <div className="header-content">
           <div className="header-title">
-            <i className="fas fa-question-circle header-icon"></i>
+            <i className="fas fa-microscope header-icon"></i>
             <div>
-              <h1>Document Q&A Assistant</h1>
+              <h1>🔬 Academic Paper Discovery Engine</h1>
               <div className="header-subtitle">
-                AI-Powered Document Analysis & Question Answering
+                AI-Powered Research Paper Discovery & Analysis Platform
               </div>
             </div>
           </div>

@@ -159,12 +159,17 @@ class ApiClient {
     return this.makeRequest('/health');
   }
 
-  async askWithQuotes(docId, question) {
-    return this.makeRequest('/ask-with-quotes', {
+  async extractCitations(docId) {
+    return this.makeRequest(`/extract-citations/${docId}`, {
+      method: 'POST'
+    });
+  }
+
+  async exportCitations(docId, format, citations) {
+    return this.makeRequest(`/export-citations/${docId}/${format}`, {
       method: 'POST',
       body: JSON.stringify({
-        doc_id: docId,
-        question: question
+        citations: citations
       })
     });
   }
@@ -184,7 +189,8 @@ export const generateResearchQuestions = (docId) => apiClient.generateResearchQu
 export const explainConcept = (docId, concept) => apiClient.explainConcept(docId, concept);
 export const getSectionSummary = (docId, section) => apiClient.getSectionSummary(docId, section);
 export const checkHealth = () => apiClient.checkHealth();
-export const askWithQuotes = (docId, question) => apiClient.askWithQuotes(docId, question);
+export const extractCitations = (docId) => apiClient.extractCitations(docId);
+export const exportCitations = (docId, format, citations) => apiClient.exportCitations(docId, format, citations);
 export const getProcessingStatus = (docId) => apiClient.getProcessingStatus(docId);
 export const getAllProcessingStatuses = () => apiClient.getAllProcessingStatuses();
 export const pollProcessingStatus = (docId, onProgress, maxWaitTime) => 
