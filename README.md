@@ -1,23 +1,23 @@
-# 📄 PDF AI Assistant - Professional Document Analysis
+# 🎓 Academic Citation Extractor - For Masters Students
 
 ![Python](https://img.shields.io/badge/Python-3.9%2B-blue)
-![JavaScript](https://img.shields.io/badge/JavaScript-ES6%2B-yellow)
+![React](https://img.shields.io/badge/React-18%2B-blue)
 ![OpenAI](https://img.shields.io/badge/OpenAI-API-green)
 ![Docker](https://img.shields.io/badge/Docker-Compose-important)
 ![PDF.js](https://img.shields.io/badge/PDF.js-3.11%2B-red)
 
-A powerful **microservice** for **PDF document analysis** with **AI-powered summarization** and **intelligent question-answering**. Features a **professional HTML + JavaScript frontend** with advanced **PDF.js integration** for superior document viewing experience.
+A specialized **AI-powered tool** designed for **Masters students** to automatically **extract and format academic citations** from research papers. Save hours of manual work by automatically detecting references and exporting them in standard academic formats.
 
 ## 🌟 Key Features
 
-- **📤 Smart Document Upload**: Drag-and-drop PDF processing with real-time feedback
-- **🤖 AI-Powered Analysis**: Generate comprehensive summaries using OpenAI GPT models
-- **❓ Intelligent Q&A**: Ask questions and get answers with detailed source citations
-- **📍 Source Attribution**: Page numbers, section headings, and text snippets for transparency
-- **📱 Professional PDF Viewer**: Advanced PDF.js integration with navigation controls
-- **🎨 Modern Interface**: Responsive HTML + JavaScript frontend (no Python dependencies)
-- **⚡ Fast Retrieval**: ChromaDB vector database for lightning-fast document search
-- **🔍 Advanced Features**: Zoom controls, page jumping, keyboard shortcuts
+- **� Automatic Citation Detection**: Advanced pattern matching to find academic references
+- **🎯 Multiple Citation Formats**: Export in APA, MLA, Harvard, and BibTeX formats
+- **🔍 Smart Pattern Recognition**: Detects author-date citations, DOIs, URLs, and journal references
+- **📄 PDF Processing**: Upload research papers and extract citations automatically
+- **� Export Options**: Download formatted citations or copy to clipboard
+- **🎓 Masters Student Focus**: Designed specifically for dissertation and thesis work
+- **📱 Modern Interface**: Responsive React frontend with intuitive design
+- **⚡ Fast Processing**: ChromaDB vector database for efficient document analysis
 
 ## 🏗️ Architecture
 
