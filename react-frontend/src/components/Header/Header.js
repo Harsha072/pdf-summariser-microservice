@@ -31,7 +31,7 @@ const Header = ({ connectionStatus }) => {
           <div className="header-title">
             <i className="fas fa-microscope header-icon"></i>
             <div>
-              <h1>🔬 Academic Paper Discovery Engine</h1>
+              <h1> Academic Paper Discovery Engine</h1>
               <div className="header-subtitle">
                 AI-Powered Research Paper Discovery & Analysis Platform
               </div>

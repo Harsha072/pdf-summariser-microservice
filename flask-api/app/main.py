@@ -7,6 +7,8 @@ import uuid
 import time
 import logging
 import threading
+import hashlib
+import pickle
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -30,6 +32,16 @@ import fitz  # PyMuPDF
 
 # Text similarity and processing
 from fuzzywuzzy import fuzz
+
+# Redis cache import
+try:
+    import redis
+    import pickle
+    REDIS_AVAILABLE = True
+except ImportError:
+    print("Warning: redis library not installed. Install with: pip install redis")
+    redis = None
+    REDIS_AVAILABLE = False
 
 # ArXiv API import
 try:
@@ -66,6 +78,70 @@ class Config:
 
 config = Config()
 
+# Initialize Redis client
+redis_client = None
+REDIS_ENABLED = os.getenv('ENABLE_REDIS', 'true').lower() == 'true'
+
+if REDIS_AVAILABLE and REDIS_ENABLED:
+    try:
+        # Check for Redis URL first (production platforms)
+        redis_url = os.getenv('REDIS_URL')
+        
+        if redis_url:
+            # Parse Redis URL (production platforms like Redis Cloud, Heroku, Railway)
+            redis_client = redis.from_url(
+                redis_url,
+                decode_responses=False,
+                socket_timeout=10,
+                socket_connect_timeout=10,
+                retry_on_timeout=True,
+                health_check_interval=30
+            )
+            logger.info(f"🔗 Connecting to Redis via URL: {redis_url.split('@')[-1] if '@' in redis_url else redis_url}")
+        else:
+            # Individual configuration with SSL and password support
+            redis_host = os.getenv('REDIS_HOST', 'localhost')
+            redis_port = int(os.getenv('REDIS_PORT', 6379))
+            redis_password = os.getenv('REDIS_PASSWORD')
+            redis_ssl = os.getenv('REDIS_SSL', 'false').lower() == 'true'
+            
+            logger.info(f"🔗 Connecting to Redis: {redis_host}:{redis_port} (SSL: {redis_ssl})")
+            
+            redis_client = redis.Redis(
+                host=redis_host,
+                port=redis_port,
+                password=redis_password,
+                db=int(os.getenv('REDIS_DB', 0)),
+                decode_responses=False,
+                socket_timeout=10,
+                socket_connect_timeout=10,
+                retry_on_timeout=True,
+                health_check_interval=30,
+                ssl=redis_ssl,
+                ssl_cert_reqs=None if redis_ssl else None
+            )
+        
+        # Test connection
+        logger.info("🔍 Testing Redis connection...")
+        redis_client.ping()
+        logger.info("✅ Redis client initialized successfully - Caching ENABLED")
+        
+    except Exception as e:
+        logger.error(f"❌ Redis connection failed: {e}")
+        logger.info("📝 Application will continue without caching.")
+        logger.info("🔧 Debug info:")
+        logger.info(f"   - REDIS_HOST: {os.getenv('REDIS_HOST', 'not set')}")
+        logger.info(f"   - REDIS_PORT: {os.getenv('REDIS_PORT', 'not set')}")
+        logger.info(f"   - REDIS_PASSWORD: {'set' if os.getenv('REDIS_PASSWORD') else 'not set'}")
+        logger.info(f"   - REDIS_SSL: {os.getenv('REDIS_SSL', 'not set')}")
+        logger.info(f"   - REDIS_URL: {'set' if os.getenv('REDIS_URL') else 'not set'}")
+        redis_client = None
+else:
+    if not REDIS_ENABLED:
+        logger.info("🔒 Redis caching disabled via ENABLE_REDIS=false")
+    else:
+        logger.warning("📦 Redis library not available. Install with: pip install redis")
+
 # Initialize OpenAI client
 openai_client = None
 try:
@@ -87,6 +163,471 @@ except Exception as e:
 # Global processing status tracking
 processing_status = {}
 status_lock = threading.Lock()
+
+
+class RedisCacheManager:
+    """Redis cache manager for search results and paper details"""
+    
+    def __init__(self, redis_client):
+        self.redis_client = redis_client
+        self.logger = logger
+        self.enabled = redis_client is not None
+        
+        # Cache TTL settings (in seconds)
+        self.SEARCH_RESULTS_TTL = 3600  # 1 hour
+        self.PAPER_DETAILS_TTL = 7200   # 2 hours
+        self.SESSION_TTL = 1800         # 30 minutes
+    
+    def _generate_cache_key(self, prefix: str, *args) -> str:
+        """Generate a cache key from prefix and arguments"""
+        key_parts = [str(arg) for arg in args if arg is not None]
+        key_string = "|".join(key_parts)
+        # Create a hash for long keys
+        import hashlib
+        key_hash = hashlib.md5(key_string.encode()).hexdigest()
+        return f"{prefix}:{key_hash}"
+    
+    def _serialize_data(self, data: Any) -> bytes:
+        """Serialize data for Redis storage"""
+        return pickle.dumps(data)
+    
+    def _deserialize_data(self, data: bytes) -> Any:
+        """Deserialize data from Redis"""
+        return pickle.loads(data)
+    
+    def cache_search_results(self, query: str, sources: List[str], max_results: int, results: Dict[str, Any], session_id: str = None) -> bool:
+        """Cache search results"""
+        print(f"🔍 DEBUG: Starting cache operation for query: {query[:50]}...")
+        print(f"🔍 DEBUG: Session ID: {session_id}")
+        print(f"🔍 DEBUG: Redis enabled: {self.enabled}")
+        
+        if not self.enabled:
+            print("❌ DEBUG: Redis not enabled, skipping cache")
+            return False
+        
+        try:
+            cache_key = self._generate_cache_key("search", query, "|".join(sorted(sources)), max_results)
+            print(f"🔍 DEBUG: Generated cache key: {cache_key}")
+            
+            cache_data = {
+                "results": results,
+                "timestamp": datetime.now().isoformat(),
+                "query": query,
+                "sources": sources,
+                "max_results": max_results,
+                "session_id": session_id
+            }
+            
+            serialized_data = self._serialize_data(cache_data)
+            print(f"🔍 DEBUG: Serialized data size: {len(serialized_data)} bytes")
+            
+            # Test Redis connection before caching
+            self.redis_client.ping()
+            print("🔍 DEBUG: Redis ping successful")
+            
+            # Cache the data
+            result = self.redis_client.setex(cache_key, self.SEARCH_RESULTS_TTL, serialized_data)
+            print(f"🔍 DEBUG: setex result: {result}")
+            
+            # Verify the data was cached
+            test_data = self.redis_client.get(cache_key)
+            print(f"🔍 DEBUG: Verification - data exists: {test_data is not None}")
+            
+            # Also cache by session ID if provided
+            if session_id:
+                session_key = f"session:{session_id}:last_search"
+                session_result = self.redis_client.setex(session_key, self.SESSION_TTL, cache_key.encode())
+                print(f"🔍 DEBUG: Session cache result: {session_result}")
+            
+            print("✅ DEBUG: Successfully cached search results")
+            self.logger.info(f"Cached search results for query: {query[:50]}...")
+            return True
+            
+        except Exception as e:
+            print(f"❌ DEBUG: Cache operation failed: {e}")
+            self.logger.error(f"Failed to cache search results: {e}")
+            return False
+    
+    def get_cached_search_results(self, query: str, sources: List[str], max_results: int) -> Optional[Dict[str, Any]]:
+        """Retrieve cached search results"""
+        print(f"🔍 DEBUG: Looking for cached results for query: {query[:50]}...")
+        print(f"🔍 DEBUG: Redis enabled: {self.enabled}")
+        
+        if not self.enabled:
+            print("❌ DEBUG: Redis not enabled, returning None")
+            return None
+        
+        try:
+            cache_key = self._generate_cache_key("search", query, "|".join(sorted(sources)), max_results)
+            print(f"🔍 DEBUG: Looking for cache key: {cache_key}")
+            
+            # Test Redis connection
+            self.redis_client.ping()
+            print("🔍 DEBUG: Redis ping successful")
+            
+            cached_data = self.redis_client.get(cache_key)
+            print(f"🔍 DEBUG: Raw cached data found: {cached_data is not None}")
+            
+            if cached_data:
+                data = self._deserialize_data(cached_data)
+                print(f"🔍 DEBUG: Deserialized data keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
+                self.logger.info(f"Retrieved cached search results for query: {query[:50]}...")
+                return data
+            else:
+                print("❌ DEBUG: No cached data found")
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ DEBUG: Cache retrieval failed: {e}")
+            self.logger.error(f"Failed to retrieve cached search results: {e}")
+            return None
+    
+    def cache_paper_details(self, paper: Dict[str, Any], analysis: Dict[str, Any], session_id: str = None) -> bool:
+        """Cache paper details and analysis"""
+        if not self.enabled:
+            return False
+        
+        try:
+            paper_id = paper.get('id') or paper.get('title', 'unknown')
+            cache_key = self._generate_cache_key("paper_details", paper_id)
+            
+            serialized_data = self._serialize_data({
+                "paper": paper,
+                "analysis": analysis,
+                "timestamp": datetime.now().isoformat(),
+                "session_id": session_id
+            })
+            
+            self.redis_client.setex(cache_key, self.PAPER_DETAILS_TTL, serialized_data)
+            self.logger.info(f"Cached paper details for: {paper.get('title', 'Unknown')[:50]}...")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to cache paper details: {e}")
+            return False
+    
+    def get_cached_paper_details(self, paper: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Retrieve cached paper details"""
+        if not self.enabled:
+            return None
+        
+        try:
+            paper_id = paper.get('id') or paper.get('title', 'unknown')
+            cache_key = self._generate_cache_key("paper_details", paper_id)
+            cached_data = self.redis_client.get(cache_key)
+            
+            if cached_data:
+                data = self._deserialize_data(cached_data)
+                self.logger.info(f"Retrieved cached paper details for: {paper.get('title', 'Unknown')[:50]}...")
+                return data
+            
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"Failed to retrieve cached paper details: {e}")
+            return None
+    
+    def get_session_last_search(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Get the last search results for a session"""
+        if not self.enabled or not session_id:
+            return None
+        
+        try:
+            session_key = f"session:{session_id}:last_search"
+            search_cache_key = self.redis_client.get(session_key)
+            
+            if search_cache_key:
+                search_cache_key = search_cache_key.decode('utf-8')
+                cached_data = self.redis_client.get(search_cache_key)
+                
+                if cached_data:
+                    data = self._deserialize_data(cached_data)
+                    self.logger.info(f"Retrieved session search results for session: {session_id}")
+                    return data
+            
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"Failed to retrieve session search results: {e}")
+            return None
+    
+    def clear_cache(self, pattern: str = None) -> bool:
+        """Clear cache entries matching pattern"""
+        if not self.enabled:
+            return False
+        
+        try:
+            if pattern:
+                keys = self.redis_client.keys(f"*{pattern}*")
+                if keys:
+                    self.redis_client.delete(*keys)
+                    self.logger.info(f"Cleared {len(keys)} cache entries matching pattern: {pattern}")
+            else:
+                self.redis_client.flushdb()
+                self.logger.info("Cleared all cache entries")
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to clear cache: {e}")
+            return False
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Get cache statistics"""
+        if not self.enabled:
+            return {"enabled": False, "message": "Redis not available"}
+        
+        try:
+            info = self.redis_client.info()
+            return {
+                "enabled": True,
+                "connected_clients": info.get('connected_clients', 0),
+                "used_memory": info.get('used_memory_human', 'N/A'),
+                "total_commands_processed": info.get('total_commands_processed', 0),
+                "keyspace_hits": info.get('keyspace_hits', 0),
+                "keyspace_misses": info.get('keyspace_misses', 0),
+                "hit_rate": round(
+                    info.get('keyspace_hits', 0) / max(1, info.get('keyspace_hits', 0) + info.get('keyspace_misses', 0)) * 100, 2
+                )
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get cache stats: {e}")
+            return {"enabled": False, "error": str(e)}
+
+    def get_recent_search_results(self, session_id: str) -> List[Dict[str, Any]]:
+        """Get all cached search results for a session"""
+        if not self.enabled or not session_id:
+            return []
+        
+        try:
+            # Get all cache keys for the session - fix pattern to match key generation
+            pattern = f"search:*"
+            keys = self.redis_client.keys(pattern)
+            
+            results = []
+            for key in keys:
+                try:
+                    cached_data = self.redis_client.get(key)
+                    if cached_data:
+                        data = self._deserialize_data(cached_data)
+                        # Check if this result belongs to the session
+                        if data.get('session_id') == session_id:
+                            results.append({
+                                'query': data.get('query', ''),
+                                'results': data.get('results', {}),
+                                'timestamp': data.get('timestamp'),
+                                'sources': data.get('sources', []),
+                                'max_results': data.get('max_results', 10)
+                            })
+                except Exception as e:
+                    self.logger.warning(f"Failed to deserialize cached result: {e}")
+                    continue
+            
+            # Sort by timestamp (most recent first)
+            results.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+            return results[:5]  # Return last 5 searches
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get recent search results: {e}")
+            return []
+
+    def create_session(self) -> str:
+        """Create a new session ID"""
+        import uuid
+        session_id = str(uuid.uuid4())
+        
+        if not self.enabled:
+            return session_id
+        
+        try:
+            # Store session metadata in Redis
+            session_key = f"session:{session_id}"
+            session_data = {
+                'created_at': datetime.utcnow().isoformat(),
+                'last_activity': datetime.utcnow().isoformat(),
+                'searches_count': 0
+            }
+            
+            serialized_data = self._serialize_data(session_data)
+            self.redis_client.setex(session_key, self.SESSION_TTL, serialized_data)
+            self.logger.info(f"Created new session: {session_id}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to create session in Redis: {e}")
+        
+        return session_id
+
+    def clear_session_cache(self, session_id: str) -> int:
+        """Clear all cache entries for a specific session"""
+        if not self.enabled or not session_id:
+            return 0
+        
+        try:
+            cleared_count = 0
+            
+            # Clear search results for this session
+            pattern = f"search_results:*"
+            keys = self.redis_client.keys(pattern)
+            
+            for key in keys:
+                try:
+                    cached_data = self.redis_client.get(key)
+                    if cached_data:
+                        data = self._deserialize_data(cached_data)
+                        if data.get('session_id') == session_id:
+                            self.redis_client.delete(key)
+                            cleared_count += 1
+                except Exception as e:
+                    self.logger.warning(f"Failed to check cache entry: {e}")
+                    continue
+            
+            # Clear paper details for this session
+            pattern = f"paper_details:*"
+            keys = self.redis_client.keys(pattern)
+            
+            for key in keys:
+                try:
+                    cached_data = self.redis_client.get(key)
+                    if cached_data:
+                        data = self._deserialize_data(cached_data)
+                        if data.get('session_id') == session_id:
+                            self.redis_client.delete(key)
+                            cleared_count += 1
+                except Exception as e:
+                    self.logger.warning(f"Failed to check cache entry: {e}")
+                    continue
+            
+            # Clear session metadata
+            session_key = f"session:{session_id}"
+            if self.redis_client.delete(session_key):
+                cleared_count += 1
+            
+            self.logger.info(f"Cleared {cleared_count} cache entries for session {session_id}")
+            return cleared_count
+            
+        except Exception as e:
+            self.logger.error(f"Failed to clear session cache: {e}")
+            return 0
+
+    def clear_all_cache(self) -> bool:
+        """Clear all cache entries"""
+        if not self.enabled:
+            return False
+        
+        try:
+            # Clear all cache patterns
+            patterns = ["search_results:*", "paper_details:*", "session:*"]
+            total_cleared = 0
+            
+            for pattern in patterns:
+                keys = self.redis_client.keys(pattern)
+                if keys:
+                    deleted = self.redis_client.delete(*keys)
+                    total_cleared += deleted
+            
+            self.logger.info(f"Cleared {total_cleared} total cache entries")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to clear all cache: {e}")
+            return False
+
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Get comprehensive cache statistics"""
+        if not self.enabled:
+            return {"enabled": False, "message": "Redis not available"}
+        
+        try:
+            info = self.redis_client.info()
+            
+            # Get counts for different cache types
+            search_keys = len(self.redis_client.keys("search_results:*"))
+            paper_keys = len(self.redis_client.keys("paper_details:*"))
+            session_keys = len(self.redis_client.keys("session:*"))
+            
+            return {
+                "enabled": True,
+                "connected_clients": info.get('connected_clients', 0),
+                "used_memory": info.get('used_memory_human', 'N/A'),
+                "total_commands_processed": info.get('total_commands_processed', 0),
+                "keyspace_hits": info.get('keyspace_hits', 0),
+                "keyspace_misses": info.get('keyspace_misses', 0),
+                "hit_rate": round(
+                    info.get('keyspace_hits', 0) / max(1, info.get('keyspace_hits', 0) + info.get('keyspace_misses', 0)) * 100, 2
+                ),
+                "cache_counts": {
+                    "search_results": search_keys,
+                    "paper_details": paper_keys,
+                    "active_sessions": session_keys,
+                    "total_entries": search_keys + paper_keys + session_keys
+                }
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get cache stats: {e}")
+            return {"enabled": False, "error": str(e)}
+
+    def cache_paper_details(self, paper: Dict[str, Any], analysis: Dict[str, Any], session_id: str = None) -> bool:
+        """Cache paper analysis results"""
+        if not self.enabled:
+            return False
+        
+        try:
+            # Generate cache key from paper title and authors
+            title = paper.get('title', 'unknown')
+            authors = paper.get('authors', [])
+            author_str = '|'.join([str(auth) for auth in authors[:3] if auth])
+            
+            cache_key = self._generate_cache_key("paper_details", title, author_str)
+            
+            cache_data = {
+                'paper': paper,
+                'analysis': analysis,
+                'timestamp': datetime.utcnow().isoformat(),
+                'session_id': session_id
+            }
+            
+            serialized_data = self._serialize_data(cache_data)
+            success = self.redis_client.setex(cache_key, self.PAPER_DETAILS_TTL, serialized_data)
+            
+            if success:
+                self.logger.info(f"Cached paper analysis: {title[:50]}...")
+                return True
+                
+        except Exception as e:
+            self.logger.error(f"Failed to cache paper details: {e}")
+        
+        return False
+
+    def get_cached_paper_details(self, paper: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Get cached paper analysis if available"""
+        if not self.enabled:
+            return None
+        
+        try:
+            # Generate same cache key as used for caching
+            title = paper.get('title', 'unknown')
+            authors = paper.get('authors', [])
+            author_str = '|'.join([str(auth) for auth in authors[:3] if auth])
+            
+            cache_key = self._generate_cache_key("paper_details", title, author_str)
+            
+            cached_data = self.redis_client.get(cache_key)
+            if cached_data:
+                data = self._deserialize_data(cached_data)
+                self.logger.info(f"Retrieved cached paper analysis: {title[:50]}...")
+                return data
+                
+        except Exception as e:
+            self.logger.error(f"Failed to get cached paper details: {e}")
+        
+        return None
+
+
+# Initialize cache manager
+cache_manager = RedisCacheManager(redis_client)
 
 
 class ResearchFocusExtractor:
@@ -743,6 +1284,7 @@ def discover_papers():
         
         sources = data.get('sources', ['arxiv', 'semantic_scholar'])
         max_results = min(data.get('max_results', config.DEFAULT_MAX_RESULTS), config.MAX_ALLOWED_RESULTS)
+        session_id = data.get('session_id')  # Optional session ID for caching
         
         # Validate sources
         valid_sources = ['arxiv', 'semantic_scholar', 'google_scholar']
@@ -751,8 +1293,23 @@ def discover_papers():
         if not sources:
             return jsonify({"success": False, "error": "No valid sources specified"}), 400
         
-        # Discover papers
+        # Check cache first
+        cached_result = cache_manager.get_cached_search_results(research_query, sources, max_results)
+        if cached_result:
+            print(cached_result)
+            cached_result["results"]["from_cache"] = True
+            cached_result["results"]["cache_timestamp"] = cached_result.get("timestamp")
+            logger.info(f"Returning cached results for query: {research_query[:50]}...")
+            return jsonify(cached_result["results"])
+        
+        # Discover papers if not in cache
         result = discovery_engine.discover_papers(research_query, sources, max_results)
+        
+        # Cache the results
+        if result.get("success"):
+            print("cahing the results")
+            cache_manager.cache_search_results(research_query, sources, max_results, result, session_id)
+            result["from_cache"] = False
         
         return jsonify(result)
         
@@ -871,6 +1428,360 @@ def download_paper():
     except Exception as e:
         logger.error(f"Paper download endpoint failed: {e}")
         return jsonify({"success": False, "error": "Internal server error"}), 500
+
+
+@app.route('/api/paper-details', methods=['POST'])
+def get_paper_details():
+    """Generate detailed analysis and summary for a specific paper"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"success": False, "error": "No data provided"}), 400
+        
+        paper = data.get('paper')
+        if not paper:
+            return jsonify({"success": False, "error": "Paper data is required"}), 400
+        
+        session_id = data.get('session_id')  # Optional session ID
+        
+        # Check cache first
+        cached_result = cache_manager.get_cached_paper_details(paper)
+        if cached_result:
+            logger.info(f"Returning cached paper details for: {paper.get('title', 'Unknown')[:50]}...")
+            return jsonify({
+                "success": True,
+                "paper": cached_result["paper"],
+                "detailed_analysis": cached_result["analysis"],
+                "from_cache": True,
+                "cache_timestamp": cached_result.get("timestamp")
+            })
+        
+        # Generate detailed analysis using AI if not in cache
+        detailed_analysis = generate_paper_analysis(paper)
+        
+        # Cache the analysis
+        cache_manager.cache_paper_details(paper, detailed_analysis, session_id)
+        
+        return jsonify({
+            "success": True,
+            "paper": paper,
+            "detailed_analysis": detailed_analysis,
+            "from_cache": False
+        })
+        
+    except Exception as e:
+        logger.error(f"Paper details endpoint failed: {e}")
+        return jsonify({"success": False, "error": "Internal server error"}), 500
+
+
+@app.route('/api/cache/stats', methods=['GET'])
+def get_cache_stats():
+    """Get cache statistics"""
+    try:
+        stats = cache_manager.get_cache_stats()
+        return jsonify({
+            "success": True,
+            "cache_stats": stats
+        })
+    except Exception as e:
+        logger.error(f"Error getting cache stats: {str(e)}")
+        return jsonify({"success": False, "error": "Failed to get cache statistics"}), 500
+
+
+@app.route('/api/cache/clear', methods=['POST'])
+def clear_cache():
+    """Clear cache (optionally by session ID)"""
+    try:
+        data = request.get_json() or {}
+        session_id = data.get('session_id')
+        
+        if session_id:
+            cleared_count = cache_manager.clear_session_cache(session_id)
+            return jsonify({
+                "success": True,
+                "message": f"Cleared {cleared_count} items for session {session_id}",
+                "cleared_count": cleared_count
+            })
+        else:
+            cache_manager.clear_all_cache()
+            return jsonify({
+                "success": True,
+                "message": "All cache cleared"
+            })
+    except Exception as e:
+        logger.error(f"Error clearing cache: {str(e)}")
+        return jsonify({"success": False, "error": "Failed to clear cache"}), 500
+
+
+@app.route('/api/session/new', methods=['POST'])
+def create_session():
+    """Create a new session ID"""
+    try:
+        session_id = cache_manager.create_session()
+        return jsonify({
+            "success": True,
+            "session_id": session_id
+        })
+    except Exception as e:
+        logger.error(f"Error creating session: {str(e)}")
+        return jsonify({"success": False, "error": "Failed to create session"}), 500
+
+
+@app.route('/api/debug/cache', methods=['GET'])
+def debug_cache():
+    """Debug cache operations"""
+    try:
+        debug_info = {
+            "redis_enabled": cache_manager.enabled,
+            "redis_connected": False,
+            "cache_keys": [],
+            "test_cache": None
+        }
+        
+        if cache_manager.redis_client:
+            try:
+                # Test connection
+                cache_manager.redis_client.ping()
+                debug_info["redis_connected"] = True
+                
+                # Get all keys
+                keys = cache_manager.redis_client.keys("*")
+                debug_info["cache_keys"] = [key.decode() if isinstance(key, bytes) else str(key) for key in keys]
+                
+                # Test cache operation
+                test_key = "test:debug"
+                test_data = {"test": "data", "timestamp": datetime.now().isoformat()}
+                serialized = cache_manager._serialize_data(test_data)
+                
+                cache_manager.redis_client.setex(test_key, 60, serialized)
+                retrieved = cache_manager.redis_client.get(test_key)
+                
+                if retrieved:
+                    deserialized = cache_manager._deserialize_data(retrieved)
+                    debug_info["test_cache"] = "Success - can cache and retrieve"
+                else:
+                    debug_info["test_cache"] = "Failed - cannot retrieve cached data"
+                    
+            except Exception as e:
+                debug_info["redis_error"] = str(e)
+        
+        return jsonify(debug_info)
+        
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+
+@app.route('/api/cache/search-results', methods=['POST'])
+def get_cached_search_results():
+    """Get cached search results for a session"""
+    print("calling cached search results")
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No data provided"}), 400
+        
+        session_id = data.get('session_id')
+        query = data.get('query')  # Optional: get specific query results
+        
+        if not session_id:
+            return jsonify({"success": False, "error": "Session ID is required"}), 400
+        
+        # Get all cached results for the session
+        if query:
+            # Get specific query results
+            cached_result = cache_manager.get_cached_search_results(query, session_id)
+            print("getting cached results", cached_result)
+            if cached_result:
+                return jsonify({
+                    "success": True,
+                    "has_cache": True,
+                    "result": cached_result,
+                    "query": query
+                })
+            else:
+                return jsonify({
+                    "success": True,
+                    "has_cache": False,
+                    "message": "No cached results for this query"
+                })
+        else:
+            # Get the most recent search results for the session
+            recent_results = cache_manager.get_recent_search_results(session_id)
+            if recent_results:
+                return jsonify({
+                    "success": True,
+                    "has_cache": True,
+                    "results": recent_results
+                })
+            else:
+                return jsonify({
+                    "success": True,
+                    "has_cache": False,
+                    "message": "No cached search results for this session"
+                })
+                
+    except Exception as e:
+        logger.error(f"Error getting cached search results: {str(e)}")
+        return jsonify({"success": False, "error": "Failed to get cached results"}), 500
+
+
+def generate_paper_analysis(paper: Dict[str, Any]) -> Dict[str, Any]:
+    """Generate comprehensive analysis of a research paper using AI"""
+    try:
+        title = paper.get('title', 'Unknown Title')
+        summary = paper.get('summary', 'No summary available')
+        authors = paper.get('authors', [])
+        source = paper.get('source', 'Unknown')
+        citation_count = paper.get('citation_count', 0)
+        published = paper.get('published', 'Unknown')
+        
+        if not openai_client:
+            return generate_fallback_analysis(paper)
+        
+        # Create comprehensive prompt for AI analysis
+        authors_str = ', '.join([str(auth) for auth in authors[:5] if auth])
+        
+        prompt = f"""
+        Provide a comprehensive analysis of this research paper. Generate a detailed summary that would be helpful for graduate students and researchers.
+        
+        Paper Details:
+        - Title: {title}
+        - Authors: {authors_str}
+        - Source: {source}
+        - Published: {published}
+        - Citations: {citation_count}
+        - Abstract: {summary[:1000]}
+        
+        Please provide a JSON response with exactly these keys:
+        {{
+            "brief_summary": "A concise 2-3 sentence summary of the main contribution",
+            "detailed_summary": "A comprehensive 4-5 paragraph analysis covering methodology, findings, and significance",
+            "key_contributions": ["contribution1", "contribution2", "contribution3"],
+            "methodology": "Brief description of the research methodology used",
+            "practical_applications": ["application1", "application2", "application3"],
+            "strengths": ["strength1", "strength2", "strength3"],
+            "limitations": ["limitation1", "limitation2"],
+            "target_audience": "Who would benefit from reading this paper",
+            "reading_difficulty": "beginner|intermediate|advanced",
+            "estimated_reading_time": "15-20 minutes",
+            "related_topics": ["topic1", "topic2", "topic3"],
+            "impact_score": 85,
+            "recommendation": "Why students should or shouldn't read this paper"
+        }}
+        
+        Respond only with valid JSON, no additional text.
+        """
+        
+        response = openai_client.invoke(prompt)
+        
+        # Parse AI response
+        try:
+            if hasattr(response, 'content'):
+                content = str(response.content).strip()
+            else:
+                content = str(response).strip()
+                
+            analysis = json.loads(content)
+            return validate_analysis_result(analysis)
+            
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse AI analysis response: {e}")
+            return generate_fallback_analysis(paper)
+            
+    except Exception as e:
+        logger.error(f"AI paper analysis failed: {e}")
+        return generate_fallback_analysis(paper)
+
+
+def validate_analysis_result(analysis: Dict) -> Dict[str, Any]:
+    """Validate and clean AI analysis result"""
+    return {
+        "brief_summary": str(analysis.get("brief_summary", "This paper presents research findings in its field."))[:500],
+        "detailed_summary": str(analysis.get("detailed_summary", "Detailed analysis not available."))[:2000],
+        "key_contributions": [str(c)[:200] for c in analysis.get("key_contributions", [])[:5]],
+        "methodology": str(analysis.get("methodology", "Research methodology not specified."))[:500],
+        "practical_applications": [str(a)[:200] for a in analysis.get("practical_applications", [])[:5]],
+        "strengths": [str(s)[:200] for s in analysis.get("strengths", [])[:5]],
+        "limitations": [str(l)[:200] for l in analysis.get("limitations", [])[:3]],
+        "target_audience": str(analysis.get("target_audience", "Researchers and graduate students"))[:200],
+        "reading_difficulty": str(analysis.get("reading_difficulty", "intermediate"))[:20],
+        "estimated_reading_time": str(analysis.get("estimated_reading_time", "20-30 minutes"))[:50],
+        "related_topics": [str(t)[:100] for t in analysis.get("related_topics", [])[:5]],
+        "impact_score": min(100, max(0, int(analysis.get("impact_score", 75)))),
+        "recommendation": str(analysis.get("recommendation", "This paper provides valuable insights for researchers in the field."))[:500]
+    }
+
+
+def generate_fallback_analysis(paper: Dict[str, Any]) -> Dict[str, Any]:
+    """Generate basic analysis when AI is not available"""
+    title = paper.get('title', 'Unknown Title')
+    summary = paper.get('summary', 'No summary available')
+    citation_count = paper.get('citation_count', 0)
+    source = paper.get('source', 'Unknown')
+    
+    # Determine impact score based on citations
+    if citation_count > 500:
+        impact_score = 95
+        impact_desc = "highly influential"
+    elif citation_count > 100:
+        impact_score = 85
+        impact_desc = "well-cited"
+    elif citation_count > 50:
+        impact_score = 75
+        impact_desc = "moderately cited"
+    else:
+        impact_score = 65
+        impact_desc = "emerging research"
+    
+    # Extract basic insights from title and summary
+    text_lower = f"{title} {summary}".lower()
+    
+    # Identify methodology keywords
+    methodology = "Not specified"
+    if any(term in text_lower for term in ["machine learning", "deep learning", "neural network"]):
+        methodology = "Machine learning and neural network approaches"
+    elif any(term in text_lower for term in ["statistical", "regression", "analysis"]):
+        methodology = "Statistical analysis and modeling"
+    elif any(term in text_lower for term in ["experimental", "experiment", "study"]):
+        methodology = "Experimental research design"
+    elif any(term in text_lower for term in ["survey", "review", "systematic"]):
+        methodology = "Literature review and survey methodology"
+    
+    return {
+        "brief_summary": f"This {impact_desc} paper from {source} presents research findings related to the topic of {title[:100]}.",
+        "detailed_summary": f"This research paper, published in {source}, explores {title}. {summary[:500]} The work has received {citation_count} citations, indicating its {impact_desc} status in the research community. The paper contributes to the understanding of its field through comprehensive analysis and findings.",
+        "key_contributions": [
+            "Presents novel research findings in the field",
+            "Provides comprehensive analysis of the research topic",
+            "Contributes to the existing body of knowledge"
+        ],
+        "methodology": methodology,
+        "practical_applications": [
+            "Academic research and further studies",
+            "Practical implementation in relevant domains",
+            "Educational purposes for students and researchers"
+        ],
+        "strengths": [
+            f"Published in reputable source ({source})",
+            f"Has received {citation_count} citations showing impact",
+            "Contributes valuable insights to the field"
+        ],
+        "limitations": [
+            "Detailed methodology analysis requires full paper access",
+            "Complete evaluation needs comprehensive review"
+        ],
+        "target_audience": "Graduate students, researchers, and professionals in the field",
+        "reading_difficulty": "intermediate",
+        "estimated_reading_time": "20-30 minutes",
+        "related_topics": [
+            "Academic research methodology",
+            "Field-specific studies",
+            "Research analysis and findings"
+        ],
+        "impact_score": impact_score,
+        "recommendation": f"This {impact_desc} paper is recommended for researchers interested in the topic, offering valuable insights and contributing to field knowledge."
+    }
 
 
 @app.route('/api/sources', methods=['GET'])

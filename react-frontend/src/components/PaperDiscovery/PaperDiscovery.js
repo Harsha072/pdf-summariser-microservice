@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { getCachedSearchResults, discoverPapers } from '../../services/api';
 import './PaperDiscovery.css';
 
 const PaperDiscovery = () => {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [uploadedFile, setUploadedFile] = useState(null);
   const [discoveredPapers, setDiscoveredPapers] = useState([]);
@@ -9,12 +12,52 @@ const PaperDiscovery = () => {
   const [selectedSources, setSelectedSources] = useState(['arxiv', 'semantic_scholar']);
   const [maxResults, setMaxResults] = useState(10);
   const [error, setError] = useState('');
+  const [cacheStatus, setCacheStatus] = useState('');
 
   const availableSources = [
     { id: 'arxiv', name: 'arXiv', description: 'Open access repository of scientific papers' },
     { id: 'semantic_scholar', name: 'Semantic Scholar', description: 'AI-powered research tool' },
     { id: 'google_scholar', name: 'Google Scholar', description: 'Web search for scholarly literature' }
   ];
+
+  // Check for cached results on page load
+  useEffect(() => {
+    const loadCachedResults = async () => {
+      try {
+        console.log("page reload")
+        const cachedData = await getCachedSearchResults();
+        if (cachedData.success && cachedData.has_cache) {
+          if (cachedData.results && cachedData.results.length > 0) {
+            // Load the most recent search results
+            const mostRecent = cachedData.results[0];
+            setSearchQuery(mostRecent.query || '');
+            setDiscoveredPapers(mostRecent.results?.papers || []);
+            setSelectedSources(mostRecent.sources || ['arxiv', 'semantic_scholar']);
+            setMaxResults(mostRecent.max_results || 10);
+            setCacheStatus(`Loaded cached results from ${new Date(mostRecent.timestamp).toLocaleTimeString()}`);
+          } else if (cachedData.result) {
+            // Single result format
+            setSearchQuery(cachedData.query || '');
+            setDiscoveredPapers(cachedData.result?.papers || []);
+            setCacheStatus(`Loaded cached results from ${new Date(cachedData.result.timestamp).toLocaleTimeString()}`);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load cached results:', error);
+      }
+    };
+
+    loadCachedResults();
+  }, []);
+
+  const handleViewDetails = (paper, index) => {
+    // Store paper data in localStorage for the details page
+    const paperId = `paper_${Date.now()}_${index}`;
+    localStorage.setItem(`paper_${paperId}`, JSON.stringify(paper));
+    
+    // Navigate to details page
+    navigate(`/paper-details/${paperId}`);
+  };
 
   const handleSearchByQuery = async () => {
     if (!searchQuery.trim()) {
@@ -26,27 +69,23 @@ const PaperDiscovery = () => {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:5000/api/discover-papers', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          query: searchQuery,
-          sources: selectedSources,
-          max_results: maxResults
-        })
-      });
-
-      const data = await response.json();
+      const data = await discoverPapers(searchQuery, selectedSources, maxResults);
 
       if (data.success) {
         setDiscoveredPapers(data.papers);
+        // Update cache status
+        if (data.from_cache) {
+          setCacheStatus(`Results loaded from cache (${new Date(data.cache_timestamp).toLocaleTimeString()})`);
+        } else {
+          setCacheStatus('Fresh results - now cached for future use');
+        }
       } else {
         setError(data.error || 'Failed to discover papers');
+        setCacheStatus('');
       }
     } catch (err) {
       setError('Failed to connect to the discovery engine');
+      setCacheStatus('');
     } finally {
       setIsLoading(false);
     }
@@ -121,22 +160,52 @@ const PaperDiscovery = () => {
 
   return (
     <div className="paper-discovery">
-      <div className="discovery-header">
-        <h1>🔬 Academic Paper Discovery Engine</h1>
-        <p>Find relevant research papers using AI analysis and multi-source web scraping</p>
-      </div>
-
       <div className="discovery-controls">
         <div className="search-section">
-          <h3>Search by Research Query</h3>
+          <div className="search-header">
+            <h3>Discover Academic Papers</h3>
+            <p className="search-subtitle">Search by research topic or upload your paper to find similar work</p>
+          </div>
+          
           <div className="search-input-group">
-            <textarea
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Enter your research question or topic (e.g., 'machine learning for climate change prediction')"
-              rows={3}
-              className="search-textarea"
-            />
+            <div className="textarea-container">
+              <textarea
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Enter your research question or topic (e.g., 'machine learning for climate change prediction')"
+                rows={3}
+                className="search-textarea"
+              />
+              
+              <div className="input-actions">
+                <input
+                  type="file"
+                  accept=".pdf"
+                  onChange={handleFileUpload}
+                  className="file-input"
+                  id="paper-upload"
+                />
+                <label htmlFor="paper-upload" className="file-upload-btn" title="Upload PDF to find similar papers">
+                  📎
+                </label>
+                
+                {uploadedFile && (
+                  <div className="uploaded-file-indicator">
+                    <span className="file-name" title={uploadedFile.name}>
+                      {uploadedFile.name.length > 20 ? uploadedFile.name.substring(0, 20) + '...' : uploadedFile.name}
+                    </span>
+                    <button 
+                      onClick={() => setUploadedFile(null)} 
+                      className="remove-file-btn-small"
+                      title="Remove file"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+            
             <button 
               onClick={handleSearchByQuery}
               disabled={isLoading}
@@ -144,22 +213,6 @@ const PaperDiscovery = () => {
             >
               {isLoading ? 'Discovering...' : 'Discover Papers'}
             </button>
-          </div>
-        </div>
-
-        <div className="upload-section">
-          <h3>Upload Research Paper</h3>
-          <div className="upload-input-group">
-            <input
-              type="file"
-              accept=".pdf"
-              onChange={handleFileUpload}
-              className="file-input"
-              id="paper-upload"
-            />
-            <label htmlFor="paper-upload" className="file-label">
-              {uploadedFile ? uploadedFile.name : 'Choose PDF file to find similar papers'}
-            </label>
           </div>
         </div>
 
@@ -174,8 +227,10 @@ const PaperDiscovery = () => {
                     checked={selectedSources.includes(source.id)}
                     onChange={() => handleSourceToggle(source.id)}
                   />
-                  <span className="source-name">{source.name}</span>
-                  <span className="source-description">{source.description}</span>
+                  <div className="source-content">
+                    <span className="source-name">{source.name}</span>
+                    <span className="source-description">{source.description}</span>
+                  </div>
                 </label>
               ))}
             </div>
@@ -209,7 +264,14 @@ const PaperDiscovery = () => {
 
       {discoveredPapers.length > 0 && (
         <div className="results-section">
-          <h3>📚 Discovered Papers ({discoveredPapers.length})</h3>
+          <div className="results-header">
+            <h3>📚 Discovered Papers ({discoveredPapers.length})</h3>
+            {cacheStatus && (
+              <div className="cache-status">
+                <span className="cache-indicator">🔄 {cacheStatus}</span>
+              </div>
+            )}
+          </div>
           <div className="papers-grid">
             {discoveredPapers.map((paper, index) => (
               <div key={paper.id || index} className="paper-card">
@@ -249,12 +311,18 @@ const PaperDiscovery = () => {
                 </div>
 
                 <div className="paper-actions">
+                  <button 
+                    onClick={() => handleViewDetails(paper, index)}
+                    className="action-button details"
+                  >
+                    🔍 View AI Analysis
+                  </button>
                   {paper.pdf_url && (
                     <button 
                       onClick={() => downloadPaper(paper.pdf_url, paper.title)}
                       className="action-button download"
                     >
-                      📄 View PDF
+                      📄 Download PDF
                     </button>
                   )}
                   {paper.url && (
@@ -262,7 +330,7 @@ const PaperDiscovery = () => {
                       onClick={() => window.open(paper.url, '_blank')}
                       className="action-button external"
                     >
-                      🔗 View Details
+                      🔗 Open Online
                     </button>
                   )}
                 </div>
