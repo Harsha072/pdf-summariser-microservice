@@ -1,7 +1,8 @@
 import React from 'react';
+import UserProfile from '../Auth/UserProfile';
 import './Header.css';
 
-const Header = ({ connectionStatus }) => {
+const Header = ({ connectionStatus, onMenuToggle, isMenuOpen }) => {
   const getStatusClass = () => {
     switch (connectionStatus) {
       case 'connected':
@@ -28,6 +29,18 @@ const Header = ({ connectionStatus }) => {
     <header className="header">
       <div className="header-container">
         <div className="header-content">
+          <button 
+            className="hamburger-menu"
+            onClick={onMenuToggle}
+            aria-label="Toggle navigation menu"
+            aria-expanded={isMenuOpen}
+          >
+            <div className={`hamburger-lines ${isMenuOpen ? 'open' : ''}`}>
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </button>
           <div className="header-title">
             <i className="fas fa-microscope header-icon"></i>
             <div>
@@ -37,11 +50,14 @@ const Header = ({ connectionStatus }) => {
               </div>
             </div>
           </div>
-          <div className="header-status">
-            <div className="status-indicator">
-              <div className={`status-dot ${getStatusClass()}`}></div>
-              <span className="status-text">{getStatusText()}</span>
+          <div className="header-actions">
+            <div className="header-status">
+              <div className="status-indicator">
+                <div className={`status-dot ${getStatusClass()}`}></div>
+                <span className="status-text">{getStatusText()}</span>
+              </div>
             </div>
+            <UserProfile />
           </div>
         </div>
       </div>

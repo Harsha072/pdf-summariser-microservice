@@ -16,12 +16,14 @@
   justify-content: space-between;
   align-items: center;
   gap: 2rem;
+  position: relative;
 }
 
 .header-title {
   display: flex;
   align-items: center;
   gap: 1rem;
+  margin-left: 80px; /* Space for hamburger menu */
 }
 
 .header-icon {
@@ -40,6 +42,12 @@
   font-size: 0.875rem;
   opacity: 0.9;
   margin-top: 0.25rem;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
 }
 
 .header-status {
@@ -99,6 +107,10 @@
     flex-direction: column;
     text-align: center;
     gap: 1rem;
+  }
+  
+  .header-title {
+    margin-left: 60px; /* Reduced space for smaller hamburger on mobile */
   }
   
   .header-title h1 {

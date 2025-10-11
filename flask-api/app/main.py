@@ -1,5 +1,4 @@
 
-
 import os
 import re
 import json
@@ -9,7 +8,7 @@ import logging
 import threading
 import hashlib
 import pickle
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -17,10 +16,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
-
-# AI and OpenAI imports
-from langchain_openai import ChatOpenAI
-from dotenv import load_dotenv
 
 # Web scraping imports
 import requests
@@ -33,132 +28,100 @@ import fitz  # PyMuPDF
 # Text similarity and processing
 from fuzzywuzzy import fuzz
 
-# Redis cache import
-try:
-    import redis
-    import pickle
-    REDIS_AVAILABLE = True
-except ImportError:
-    print("Warning: redis library not installed. Install with: pip install redis")
-    redis = None
-    REDIS_AVAILABLE = False
+# Import configuration
+from config import (
+    config, 
+    redis_client, 
+    firebase_app, 
+    firebase_config,
+    openai_client,
+    FIREBASE_AVAILABLE,
+    REDIS_AVAILABLE,
+    external_libs
+)
 
 # ArXiv API import
-try:
+arxiv = None
+if external_libs.arxiv_available:
     import arxiv
-except ImportError:
-    print("Warning: arxiv library not installed. Install with: pip install arxiv")
-    arxiv = None
 
-# Load environment variables
-load_dotenv()
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Get logger from config
 logger = logging.getLogger(__name__)
 
 # Initialize Flask app
 app = Flask(__name__)
 CORS(app, origins="*", methods=['GET', 'POST', 'OPTIONS'], allow_headers=['Content-Type'])
 
-# Configuration
-class Config:
-    TEMP_DIR = os.path.join(os.path.dirname(__file__), 'temp')
-    MAX_WORKERS = 4
-    DEFAULT_MAX_RESULTS = 10
-    MAX_ALLOWED_RESULTS = 20
-    DUPLICATE_THRESHOLD = 0.85
-    REQUEST_TIMEOUT = 30
+# Firebase authentication decorator
+def firebase_auth_required(f):
+    """Decorator to require Firebase authentication for endpoints"""
+    from functools import wraps
     
-    # Create temp directory
-    os.makedirs(TEMP_DIR, exist_ok=True)
-
-config = Config()
-
-# Initialize Redis client
-redis_client = None
-REDIS_ENABLED = os.getenv('ENABLE_REDIS', 'true').lower() == 'true'
-
-if REDIS_AVAILABLE and REDIS_ENABLED:
-    try:
-        # Check for Redis URL first (production platforms)
-        redis_url = os.getenv('REDIS_URL')
-        
-        if redis_url:
-            # Parse Redis URL (production platforms like Redis Cloud, Heroku, Railway)
-            redis_client = redis.from_url(
-                redis_url,
-                decode_responses=False,
-                socket_timeout=10,
-                socket_connect_timeout=10,
-                retry_on_timeout=True,
-                health_check_interval=30
-            )
-            logger.info(f"🔗 Connecting to Redis via URL: {redis_url.split('@')[-1] if '@' in redis_url else redis_url}")
-        else:
-            # Individual configuration with SSL and password support
-            redis_host = os.getenv('REDIS_HOST', 'localhost')
-            redis_port = int(os.getenv('REDIS_PORT', 6379))
-            redis_password = os.getenv('REDIS_PASSWORD')
-            redis_ssl = os.getenv('REDIS_SSL', 'false').lower() == 'true'
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not firebase_config.is_available():
+            return jsonify({'error': 'Authentication not available'}), 503
             
-            logger.info(f"🔗 Connecting to Redis: {redis_host}:{redis_port} (SSL: {redis_ssl})")
+        token = request.headers.get('Authorization')
+        if not token:
+            return jsonify({'error': 'No token provided'}), 401
+        
+        try:
+            if token.startswith('Bearer '):
+                token = token[7:]
             
-            redis_client = redis.Redis(
-                host=redis_host,
-                port=redis_port,
-                password=redis_password,
-                db=int(os.getenv('REDIS_DB', 0)),
-                decode_responses=False,
-                socket_timeout=10,
-                socket_connect_timeout=10,
-                retry_on_timeout=True,
-                health_check_interval=30,
-                ssl=redis_ssl,
-                ssl_cert_reqs=None if redis_ssl else None
-            )
-        
-        # Test connection
-        logger.info("🔍 Testing Redis connection...")
-        redis_client.ping()
-        logger.info("✅ Redis client initialized successfully - Caching ENABLED")
-        
-    except Exception as e:
-        logger.error(f"❌ Redis connection failed: {e}")
-        logger.info("📝 Application will continue without caching.")
-        logger.info("🔧 Debug info:")
-        logger.info(f"   - REDIS_HOST: {os.getenv('REDIS_HOST', 'not set')}")
-        logger.info(f"   - REDIS_PORT: {os.getenv('REDIS_PORT', 'not set')}")
-        logger.info(f"   - REDIS_PASSWORD: {'set' if os.getenv('REDIS_PASSWORD') else 'not set'}")
-        logger.info(f"   - REDIS_SSL: {os.getenv('REDIS_SSL', 'not set')}")
-        logger.info(f"   - REDIS_URL: {'set' if os.getenv('REDIS_URL') else 'not set'}")
-        redis_client = None
-else:
-    if not REDIS_ENABLED:
-        logger.info("🔒 Redis caching disabled via ENABLE_REDIS=false")
-    else:
-        logger.warning("📦 Redis library not available. Install with: pip install redis")
+            # Verify Firebase token using config
+            firebase_auth = firebase_config.get_auth()
+            decoded_token = firebase_auth.verify_id_token(token)
+            request.current_user = {
+                'uid': decoded_token['uid'],
+                'email': decoded_token.get('email'),
+                'name': decoded_token.get('name'),
+                'picture': decoded_token.get('picture'),
+                'provider': decoded_token.get('firebase', {}).get('sign_in_provider', 'unknown')
+            }
+            
+            logger.info(f"🔐 Authenticated user: {request.current_user['email']}")
+            return f(*args, **kwargs)
+            
+        except Exception as e:
+            logger.error(f"Firebase token verification failed: {e}")
+            return jsonify({'error': 'Invalid token'}), 401
+    
+    return decorated_function
 
-# Initialize OpenAI client
-openai_client = None
-try:
-    api_key = os.getenv('OPENAI_API_KEY')
-    if api_key and api_key.strip():
-        openai_client = ChatOpenAI(
-            api_key=api_key,
-            model_name="gpt-3.5-turbo",
-            temperature=0.3,
-            max_tokens=1000
-        )
-        logger.info("OpenAI client initialized successfully")
-    else:
-        logger.warning("OpenAI API key not found. AI features will use fallback methods.")
-except Exception as e:
-    logger.error(f"Failed to initialize OpenAI client: {e}")
-    openai_client = None
+# Optional authentication decorator (works for both authenticated and anonymous users)
+def firebase_auth_optional(f):
+    """Decorator for optional Firebase authentication"""
+    from functools import wraps
+    
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        request.current_user = None  # Default to no user
+        
+        if not firebase_config.is_available():
+            return f(*args, **kwargs)
+            
+        token = request.headers.get('Authorization')
+        if token and token.startswith('Bearer '):
+            try:
+                firebase_auth = firebase_config.get_auth()
+                decoded_token = firebase_auth.verify_id_token(token[7:])
+                request.current_user = {
+                    'uid': decoded_token['uid'],
+                    'email': decoded_token.get('email'),
+                    'name': decoded_token.get('name'),
+                    'picture': decoded_token.get('picture'),
+                    'provider': decoded_token.get('firebase', {}).get('sign_in_provider', 'unknown')
+                }
+                logger.info(f"🔐 Authenticated user: {request.current_user['email']}")
+            except Exception as e:
+                logger.warning(f"Invalid token provided: {e}")
+                # Continue as anonymous user
+        
+        return f(*args, **kwargs)
+    
+    return decorated_function
 
 # Global processing status tracking
 processing_status = {}
@@ -624,6 +587,112 @@ class RedisCacheManager:
             self.logger.error(f"Failed to get cached paper details: {e}")
         
         return None
+
+    # User-specific search history methods for Firebase authentication
+    def save_user_search_to_history(self, user_id: str, query: str, results_count: int, sources: List[str]) -> bool:
+        """Save search query to user's personal history"""
+        if not self.enabled or not user_id:
+            return False
+        
+        try:
+            history_key = f"user_history:{user_id}"
+            
+            search_entry = {
+                "query": query,
+                "timestamp": datetime.utcnow().isoformat(),
+                "results_count": results_count,
+                "sources": sources,
+                "search_id": str(uuid.uuid4())
+            }
+            
+            # Get existing history (limit to last 100 searches per user)
+            existing_history = []
+            try:
+                history_data = self.redis_client.get(history_key)
+                if history_data:
+                    existing_history = self._deserialize_data(history_data)
+            except:
+                existing_history = []
+            
+            # Add new search to beginning
+            existing_history.insert(0, search_entry)
+            
+            # Keep only last 100 searches per user
+            existing_history = existing_history[:100]
+            
+            # Save back to Redis (expire in 90 days for registered users)
+            serialized_history = self._serialize_data(existing_history)
+            self.redis_client.setex(history_key, 90 * 24 * 3600, serialized_history)  # 90 days
+            
+            self.logger.info(f"Saved search to user history: {query[:50]}... for user {user_id}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to save user search history: {e}")
+            return False
+
+    def get_user_search_history(self, user_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """Get user's personal search history"""
+        if not self.enabled or not user_id:
+            return []
+        
+        try:
+            history_key = f"user_history:{user_id}"
+            history_data = self.redis_client.get(history_key)
+            
+            if history_data:
+                history = self._deserialize_data(history_data)
+                return history[:limit]
+            
+            return []
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get user search history: {e}")
+            return []
+
+    def clear_user_search_history(self, user_id: str) -> bool:
+        """Clear all search history for a user"""
+        if not self.enabled or not user_id:
+            return False
+        
+        try:
+            history_key = f"user_history:{user_id}"
+            self.redis_client.delete(history_key)
+            self.logger.info(f"Cleared search history for user: {user_id}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to clear user search history: {e}")
+            return False
+
+    def delete_search_from_user_history(self, user_id: str, search_id: str) -> bool:
+        """Delete specific search from user history"""
+        if not self.enabled or not user_id:
+            return False
+        
+        try:
+            history_key = f"user_history:{user_id}"
+            history_data = self.redis_client.get(history_key)
+            
+            if history_data:
+                history = self._deserialize_data(history_data)
+                # Remove search with matching search_id
+                original_count = len(history)
+                history = [search for search in history if search.get('search_id') != search_id]
+                
+                if len(history) < original_count:
+                    # Save updated history
+                    serialized_history = self._serialize_data(history)
+                    self.redis_client.setex(history_key, 90 * 24 * 3600, serialized_history)
+                    
+                    self.logger.info(f"Deleted search from user history: {search_id}")
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"Failed to delete search from user history: {e}")
+            return False
 
 
 # Initialize cache manager
@@ -1270,6 +1339,7 @@ def health_check():
 
 
 @app.route('/api/discover-papers', methods=['POST'])
+@firebase_auth_optional
 def discover_papers():
     """Discover relevant academic papers based on research query"""
     try:
@@ -1285,6 +1355,10 @@ def discover_papers():
         sources = data.get('sources', ['arxiv', 'semantic_scholar'])
         max_results = min(data.get('max_results', config.DEFAULT_MAX_RESULTS), config.MAX_ALLOWED_RESULTS)
         session_id = data.get('session_id')  # Optional session ID for caching
+        
+        # Get user ID from Firebase auth (if authenticated)
+        user_id = request.current_user['uid'] if request.current_user else None
+        user_email = request.current_user['email'] if request.current_user else None
         
         # Validate sources
         valid_sources = ['arxiv', 'semantic_scholar', 'google_scholar']
@@ -1305,11 +1379,24 @@ def discover_papers():
         # Discover papers if not in cache
         result = discovery_engine.discover_papers(research_query, sources, max_results)
         
-        # Cache the results
+        # Cache the results and save to appropriate history
         if result.get("success"):
-            print("cahing the results")
-            cache_manager.cache_search_results(research_query, sources, max_results, result, session_id)
+            cache_key_id = user_id or session_id  # Use user_id for authenticated, session_id for anonymous
+            cache_manager.cache_search_results(research_query, sources, max_results, result, cache_key_id)
+            
+            # Save to user-specific or session-specific history
+            results_count = len(result.get('papers', []))
+            if user_id:
+                # Save to user history (persistent - 90 days)
+                cache_manager.save_user_search_to_history(user_id, research_query, results_count, sources)
+                logger.info(f"📚 Saved search to user history for: {user_email}")
+            elif session_id:
+                # Save to session history (temporary - 30 minutes)
+                cache_manager.save_search_to_history(session_id, research_query, results_count, sources)
+                logger.info(f"💾 Saved search to session history")
+            
             result["from_cache"] = False
+            result["user_authenticated"] = user_id is not None
         
         return jsonify(result)
         
@@ -1663,7 +1750,7 @@ def generate_paper_analysis(paper: Dict[str, Any]) -> Dict[str, Any]:
             "strengths": ["strength1", "strength2", "strength3"],
             "limitations": ["limitation1", "limitation2"],
             "target_audience": "Who would benefit from reading this paper",
-            "reading_difficulty": "beginner|intermediate|advanced",
+            "reading_difficulty": "Beginner|Intermediate|Advanced",
             "estimated_reading_time": "15-20 minutes",
             "related_topics": ["topic1", "topic2", "topic3"],
             "impact_score": 85,
@@ -1782,6 +1869,170 @@ def generate_fallback_analysis(paper: Dict[str, Any]) -> Dict[str, Any]:
         "impact_score": impact_score,
         "recommendation": f"This {impact_desc} paper is recommended for researchers interested in the topic, offering valuable insights and contributing to field knowledge."
     }
+
+
+# Firebase Authentication API Endpoints
+@app.route('/api/auth/verify', methods=['GET'])
+@firebase_auth_required
+def verify_token():
+    """Verify Firebase ID token and return user info"""
+    try:
+        user = request.current_user
+        
+        return jsonify({
+            "success": True,
+            "user": {
+                "uid": user['uid'],
+                "email": user['email'],
+                "name": user['name'],
+                "picture": user['picture'],
+                "provider": user['provider']
+            },
+            "message": "Token verified successfully"
+        })
+        
+    except Exception as e:
+        logger.error(f"Token verification failed: {e}")
+        return jsonify({"success": False, "error": "Token verification failed"}), 500
+
+@app.route('/api/user/profile', methods=['GET'])
+@firebase_auth_required
+def get_user_profile():
+    """Get authenticated user's profile with stats"""
+    try:
+        user = request.current_user
+        user_id = user['uid']
+        
+        # Get user's search history count
+        search_history = cache_manager.get_user_search_history(user_id, 100)
+        
+        # Calculate user stats
+        total_searches = len(search_history)
+        recent_searches = len([s for s in search_history if s.get('timestamp', '') > (datetime.utcnow() - timedelta(days=7)).isoformat()])
+        
+        return jsonify({
+            "success": True,
+            "user": {
+                "uid": user_id,
+                "email": user['email'],
+                "name": user['name'],
+                "picture": user['picture'],
+                "provider": user['provider'],
+                "stats": {
+                    "total_searches": total_searches,
+                    "recent_searches": recent_searches,
+                    "saved_papers": 0,  # Placeholder for future implementation
+                    "member_since": "2024"  # Could be stored in Redis if needed
+                }
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting user profile: {e}")
+        return jsonify({"success": False, "error": "Failed to get profile"}), 500
+
+@app.route('/api/user/search-history', methods=['GET'])
+@firebase_auth_required
+def get_user_search_history():
+    """Get authenticated user's search history"""
+    try:
+        user_id = request.current_user['uid']
+        limit = min(int(request.args.get('limit', 20)), 100)
+        
+        history = cache_manager.get_user_search_history(user_id, limit)
+        
+        return jsonify({
+            "success": True,
+            "history": history,
+            "count": len(history),
+            "user_authenticated": True
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting user search history: {e}")
+        return jsonify({"success": False, "error": "Failed to get search history"}), 500
+
+@app.route('/api/user/search-history', methods=['DELETE'])
+@firebase_auth_required
+def manage_user_search_history():
+    """Delete specific search or clear all user history"""
+    try:
+        data = request.get_json() or {}
+        user_id = request.current_user['uid']
+        search_id = data.get('search_id')  # Optional: delete specific search
+        
+        if search_id:
+            # Delete specific search
+            success = cache_manager.delete_search_from_user_history(user_id, search_id)
+            message = "Search deleted from history" if success else "Failed to delete search"
+        else:
+            # Clear all history
+            success = cache_manager.clear_user_search_history(user_id)
+            message = "Search history cleared" if success else "Failed to clear history"
+        
+        return jsonify({
+            "success": success,
+            "message": message
+        })
+        
+    except Exception as e:
+        logger.error(f"Error managing user search history: {e}")
+        return jsonify({"success": False, "error": "Failed to manage search history"}), 500
+
+@app.route('/api/user/search-history/repeat', methods=['POST'])
+@firebase_auth_required
+def repeat_user_search():
+    """Repeat a search from user's history"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No data provided"}), 400
+        
+        user_id = request.current_user['uid']
+        search_id = data.get('search_id')
+        
+        if not search_id:
+            return jsonify({"success": False, "error": "Search ID is required"}), 400
+        
+        # Get search history
+        history = cache_manager.get_user_search_history(user_id, 100)
+        
+        # Find the specific search
+        target_search = None
+        for search in history:
+            if search.get('search_id') == search_id:
+                target_search = search
+                break
+        
+        if not target_search:
+            return jsonify({"success": False, "error": "Search not found in history"}), 404
+        
+        # Repeat the search
+        query = target_search['query']
+        sources = target_search['sources']
+        max_results = config.DEFAULT_MAX_RESULTS
+        
+        # Check cache first
+        cached_result = cache_manager.get_cached_search_results(query, sources, max_results)
+        if cached_result:
+            cached_result["results"]["from_cache"] = True
+            return jsonify(cached_result["results"])
+        
+        # Perform new search
+        result = discovery_engine.discover_papers(query, sources, max_results)
+        
+        # Cache the results and update history
+        if result.get("success"):
+            cache_manager.cache_search_results(query, sources, max_results, result, user_id)
+            results_count = len(result.get('papers', []))
+            cache_manager.save_user_search_to_history(user_id, query, results_count, sources)
+            result["from_cache"] = False
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error repeating user search: {e}")
+        return jsonify({"success": False, "error": "Failed to repeat search"}), 500
 
 
 @app.route('/api/sources', methods=['GET'])

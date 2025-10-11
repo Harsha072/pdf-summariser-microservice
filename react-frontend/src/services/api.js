@@ -12,6 +12,20 @@ const getSessionId = () => {
   return sessionId;
 };
 
+// Get Firebase auth headers
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('firebase_token');
+  const headers = {
+    'Content-Type': 'application/json',
+  };
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  return headers;
+};
+
 // Create new session
 export const createSession = async () => {
   try {
@@ -41,7 +55,7 @@ export const discoverPapers = async (query, sources = ['arxiv', 'semantic_schola
   
   const response = await fetch(`${API_BASE_URL}/api/discover-papers`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify({ 
       query, 
       sources, 
@@ -221,6 +235,81 @@ export const clearLocalSession = () => {
 // Get API base URL for debugging
 export const getApiBaseUrl = () => API_BASE_URL;
 
+// Firebase Authentication API functions
+export const authAPI = {
+  // Verify Firebase token
+  verifyToken: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/verify`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Token verification failed:', error);
+      throw error;
+    }
+  },
+
+  // Get user profile
+  getUserProfile: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/user/profile`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to get user profile:', error);
+      throw error;
+    }
+  },
+
+  // Get user search history
+  getUserSearchHistory: async (limit = 20) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/user/search-history?limit=${limit}`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to get user search history:', error);
+      throw error;
+    }
+  },
+
+  // Delete user search history
+  deleteUserSearchHistory: async (searchId = null) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/user/search-history`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ search_id: searchId }),
+      });
+      return await response.json();  
+    } catch (error) {
+      console.error('Failed to delete user search history:', error);
+      throw error;
+    }
+  },
+
+  // Repeat search from history
+  repeatUserSearch: async (searchId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/user/search-history/repeat`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ search_id: searchId }),
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to repeat user search:', error);
+      throw error;
+    }
+  }
+};
+
 // Default export for backward compatibility
 export default {
   discoverPapers,
@@ -236,5 +325,7 @@ export default {
   clearCache,
   getCachedSearchResults,
   getCurrentSessionId,
-  clearLocalSession
+  clearLocalSession,
+  // Firebase Authentication APIs
+  authAPI
 };
