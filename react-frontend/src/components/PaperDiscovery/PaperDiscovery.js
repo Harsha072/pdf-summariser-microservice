@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getCachedSearchResults, discoverPapers } from '../../services/api';
+import { AuthButton, ProtectedFeature } from '../Auth/InlineAuth';
+import { SmartPaperActions } from './ProtectedPaperFeatures';
+import { useAuth } from '../../context/AuthContext';
 import './PaperDiscovery.css';
 
 const PaperDiscovery = () => {
   const navigate = useNavigate();
+  const { isAuthenticated, user, isAnonymous } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [uploadedFile, setUploadedFile] = useState(null);
   const [discoveredPapers, setDiscoveredPapers] = useState([]);
@@ -160,6 +164,31 @@ const PaperDiscovery = () => {
 
   return (
     <div className="paper-discovery">
+      {/* Authorization Status Banner */}
+      {!isAuthenticated && (
+        <div className="auth-status-banner">
+          <div className="auth-banner-content">
+            <div className="auth-banner-icon">ℹ️</div>
+            <div className="auth-banner-text">
+              <strong>Free Access:</strong> You can search and browse papers freely. 
+              <span className="auth-banner-highlight"> Sign in to download papers and view detailed AI analysis.</span>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {isAuthenticated && (
+        <div className="auth-status-banner authenticated">
+          <div className="auth-banner-content">
+            <div className="auth-banner-icon">✅</div>
+            <div className="auth-banner-text">
+              <strong>Welcome back, {user?.displayName || user?.email}!</strong> 
+              You have full access to all features including downloads and detailed analysis.
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div className="discovery-controls">
         <div className="search-section">
           <div className="search-header">
@@ -272,6 +301,18 @@ const PaperDiscovery = () => {
               </div>
             )}
           </div>
+          
+          {/* Authorization info for search results */}
+          {!isAuthenticated && discoveredPapers.length > 0 && (
+            <div className="results-auth-info">
+              <div className="auth-info-content">
+                <span className="auth-info-icon">🔓</span>
+                <span className="auth-info-text">
+                  You can browse all papers freely. Sign in to unlock downloads and detailed analysis.
+                </span>
+              </div>
+            </div>
+          )}
           <div className="papers-grid">
             {discoveredPapers.map((paper, index) => (
               <div key={paper.id || index} className="paper-card">
@@ -310,30 +351,12 @@ const PaperDiscovery = () => {
                   )}
                 </div>
 
-                <div className="paper-actions">
-                  <button 
-                    onClick={() => handleViewDetails(paper, index)}
-                    className="action-button details"
-                  >
-                    🔍 View AI Analysis
-                  </button>
-                  {paper.pdf_url && (
-                    <button 
-                      onClick={() => downloadPaper(paper.pdf_url, paper.title)}
-                      className="action-button download"
-                    >
-                      📄 Download PDF
-                    </button>
-                  )}
-                  {paper.url && (
-                    <button 
-                      onClick={() => window.open(paper.url, '_blank')}
-                      className="action-button external"
-                    >
-                      🔗 Open Online
-                    </button>
-                  )}
-                </div>
+                <SmartPaperActions
+                  paper={paper}
+                  index={index}
+                  onViewDetails={handleViewDetails}
+                  onDownloadPaper={downloadPaper}
+                />
               </div>
             ))}
           </div>

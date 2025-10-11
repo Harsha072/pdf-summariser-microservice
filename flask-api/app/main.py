@@ -694,6 +694,74 @@ class RedisCacheManager:
             self.logger.error(f"Failed to delete search from user history: {e}")
             return False
 
+    def save_search_to_history(self, session_id: str, query: str, results_count: int, sources: List[str]) -> bool:
+        """Save search query to session-based search history (for anonymous users)"""
+        if not self.enabled or not session_id:
+            return False
+        
+        try:
+            history_key = f"session_search_history:{session_id}"
+            search_id = hashlib.md5(f"{query}:{int(time.time())}".encode()).hexdigest()[:12]
+            
+            # Get existing history
+            existing_history = self.redis_client.get(history_key)
+            history = []
+            
+            if existing_history:
+                try:
+                    history = self._deserialize_data(existing_history)
+                    if not isinstance(history, list):
+                        history = []
+                except:
+                    history = []
+            
+            # Create search entry
+            search_entry = {
+                'search_id': search_id,
+                'query': query,
+                'results_count': results_count,
+                'sources': sources,
+                'timestamp': datetime.utcnow().isoformat(),
+                'session_id': session_id
+            }
+            
+            # Add to beginning of history
+            history.insert(0, search_entry)
+            
+            # Keep only last 20 searches for session history
+            history = history[:20]
+            
+            # Save back to Redis with 30 minutes TTL (shorter than user history)
+            serialized_history = self._serialize_data(history)
+            self.redis_client.setex(history_key, 30 * 60, serialized_history)  # 30 minutes
+            
+            self.logger.info(f"Saved search to session history for session: {session_id}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to save search to session history: {e}")
+            return False
+
+    def get_session_search_history(self, session_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get session-based search history (for anonymous users)"""
+        if not self.enabled or not session_id:
+            return []
+        
+        try:
+            history_key = f"session_search_history:{session_id}"
+            cached_history = self.redis_client.get(history_key)
+            
+            if cached_history:
+                history = self._deserialize_data(cached_history)
+                if isinstance(history, list):
+                    return history[:limit]
+            
+            return []
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get session search history: {e}")
+            return []
+
 
 # Initialize cache manager
 cache_manager = RedisCacheManager(redis_client)
@@ -1466,6 +1534,7 @@ def upload_paper():
 
 
 @app.route('/api/download-paper', methods=['POST'])
+@firebase_auth_required
 def download_paper():
     """Download and analyze a paper from provided URL"""
     try:
@@ -1518,6 +1587,7 @@ def download_paper():
 
 
 @app.route('/api/paper-details', methods=['POST'])
+@firebase_auth_required
 def get_paper_details():
     """Generate detailed analysis and summary for a specific paper"""
     try:

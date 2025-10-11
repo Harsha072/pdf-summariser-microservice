@@ -1,0 +1,392 @@
+/* AuthDemo.css - Authorization Demo Component Styles */
+
+.auth-demo {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+/* Demo Header */
+.demo-header {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.demo-header h2 {
+  font-size: 2.5rem;
+  color: #2d3436;
+  margin-bottom: 1rem;
+  font-weight: 700;
+}
+
+.demo-subtitle {
+  font-size: 1.2rem;
+  color: #636e72;
+  line-height: 1.6;
+  max-width: 600px;
+  margin: 0 auto 2rem;
+}
+
+/* Current Status */
+.current-status {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 2rem;
+}
+
+.status-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  max-width: 500px;
+}
+
+.status-card.authenticated {
+  background: linear-gradient(135deg, #a8e6cf 0%, #7fcdcd 100%);
+  border: 2px solid #00b894;
+}
+
+.status-card.guest {
+  background: linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%);
+  border: 2px solid #e17055;
+}
+
+.status-icon {
+  font-size: 2rem;
+  flex-shrink: 0;
+}
+
+.status-info strong {
+  display: block;
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+  color: #2d3436;
+}
+
+.status-info p {
+  margin: 0;
+  color: #2d3436;
+  opacity: 0.8;
+}
+
+/* Features Grid */
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 3rem;
+}
+
+.feature-card {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+}
+
+.feature-card.unlocked {
+  border-color: #00b894;
+}
+
+.feature-card.locked {
+  border-color: #e17055;
+  opacity: 0.9;
+}
+
+.feature-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.feature-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.feature-header h3 {
+  margin: 0;
+  font-size: 1.3rem;
+  color: #2d3436;
+  flex: 1;
+}
+
+.access-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.access-badge.free {
+  background: #a8e6cf;
+  color: #00b894;
+}
+
+.access-badge.premium {
+  background: #fab1a0;
+  color: #e17055;
+}
+
+.feature-description {
+  color: #636e72;
+  line-height: 1.6;
+  margin-bottom: 1rem;
+}
+
+.feature-status {
+  margin-bottom: 1.5rem;
+}
+
+.status-indicator {
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  display: inline-block;
+}
+
+.status-indicator.available {
+  background: rgba(0, 184, 148, 0.1);
+  color: #00b894;
+}
+
+.status-indicator.locked {
+  background: rgba(225, 112, 85, 0.1);
+  color: #e17055;
+}
+
+.feature-actions {
+  text-align: center;
+}
+
+.demo-button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 0.9rem;
+}
+
+.demo-button.available {
+  background: #00b894;
+  color: white;
+}
+
+.demo-button.available:hover {
+  background: #00a085;
+  transform: translateY(-1px);
+}
+
+.demo-button.protected {
+  background: #e17055;
+  color: white;
+}
+
+.demo-button.protected:hover {
+  background: #d55a3a;
+}
+
+/* Examples Section */
+.auth-examples {
+  margin-bottom: 3rem;
+}
+
+.auth-examples h3 {
+  text-align: center;
+  font-size: 2rem;
+  color: #2d3436;
+  margin-bottom: 2rem;
+}
+
+.examples-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 2rem;
+}
+
+.example-card {
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 2rem;
+  text-align: center;
+  border: 2px solid #e9ecef;
+}
+
+.example-card h4 {
+  margin-top: 0;
+  color: #495057;
+  font-size: 1.2rem;
+}
+
+.example-card p {
+  color: #6c757d;
+  margin-bottom: 1.5rem;
+}
+
+.example-button {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  border: none;
+  padding: 1rem 2rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.example-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.example-link {
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 600;
+  padding: 1rem 2rem;
+  border: 2px solid #667eea;
+  border-radius: 8px;
+  display: inline-block;
+  transition: all 0.3s ease;
+}
+
+.example-link:hover {
+  background: #667eea;
+  color: white;
+  transform: translateY(-1px);
+}
+
+.protected-content {
+  background: linear-gradient(135deg, #a8e6cf, #7fcdcd);
+  border-radius: 12px;
+  padding: 2rem;
+  margin-top: 1rem;
+}
+
+.premium-feature {
+  text-align: left;
+}
+
+.premium-feature h5 {
+  margin-top: 0;
+  color: #2d3436;
+  font-size: 1.3rem;
+}
+
+.premium-feature p {
+  color: #2d3436;
+  opacity: 0.8;
+}
+
+.premium-feature ul {
+  color: #2d3436;
+  opacity: 0.8;
+  padding-left: 1.5rem;
+}
+
+.premium-feature li {
+  margin-bottom: 0.5rem;
+}
+
+/* Benefits Section */
+.benefits-section {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 3rem 2rem;
+  border-radius: 20px;
+  text-align: center;
+}
+
+.benefits-section h3 {
+  font-size: 2rem;
+  margin-bottom: 2rem;
+}
+
+.benefits-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 2rem;
+}
+
+.benefit-item {
+  text-align: center;
+}
+
+.benefit-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  display: block;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+.benefit-item h4 {
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.benefit-item p {
+  opacity: 0.9;
+  line-height: 1.6;
+  font-size: 0.95rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .auth-demo {
+    padding: 1rem;
+  }
+  
+  .demo-header h2 {
+    font-size: 2rem;
+  }
+  
+  .features-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .examples-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .benefits-grid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+  
+  .status-card {
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .feature-header {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}
+
+/* Animations */
+.feature-card, .example-card, .benefit-item {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

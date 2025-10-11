@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import './LoginModal.css';
 
-const LoginModal = ({ isOpen, onClose }) => {
+const LoginModal = ({ isOpen, onClose, title = "Sign In to Your Account", hideGuestMode = false }) => {
   const { signInWithGoogle, signInWithGitHub, signInAsGuest, error } = useAuth();
   const [loading, setLoading] = useState(false);
   const [loginError, setLoginError] = useState(null);
@@ -58,7 +58,7 @@ const LoginModal = ({ isOpen, onClose }) => {
           <div className="login-title">
             <i className="fas fa-microscope"></i>
             <div>
-              <h2>Sign in to Academic Discovery</h2>
+              <h2>{title}</h2>
               <p>Access your research history and personalized features</p>
             </div>
           </div>
@@ -108,17 +108,19 @@ const LoginModal = ({ isOpen, onClose }) => {
             <span>or</span>
           </div>
 
-          {/* Guest Mode - No Registration */}
-          <button 
-            className="login-btn guest-btn"
-            onClick={handleGuestMode}
-            disabled={loading}
-          >
-            <div className="btn-content">
-              <i className="fas fa-user-secret"></i>
-              <span>Continue as Guest</span>
-            </div>
-          </button>
+          {/* Guest Mode - No Registration (only show for general login, not protected features) */}
+          {!hideGuestMode && (
+            <button 
+              className="login-btn guest-btn"
+              onClick={handleGuestMode}
+              disabled={loading}
+            >
+              <div className="btn-content">
+                <i className="fas fa-user-secret"></i>
+                <span>Continue as Guest</span>
+              </div>
+            </button>
+          )}
         </div>
 
         <div className="login-benefits">

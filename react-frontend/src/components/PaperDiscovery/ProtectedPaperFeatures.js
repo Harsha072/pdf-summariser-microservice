@@ -1,0 +1,189 @@
+import React from 'react';
+import { useAuth } from '../../context/AuthContext';
+import { ProtectedFeature } from '../Auth/InlineAuth';
+import './ProtectedPaperFeatures.css';
+
+/**
+ * ProtectedPaperActions - Shows paper actions with inline auth for protected features
+ */
+const ProtectedPaperActions = ({ 
+  paper, 
+  index, 
+  onViewDetails, 
+  onDownloadPaper 
+}) => {
+  const { isAuthenticated } = useAuth();
+
+  return (
+    <div className="paper-actions">
+      {/* View AI Analysis - Protected Feature */}
+      <ProtectedFeature
+        feature="view detailed AI analysis"
+        compact={true}
+        showBenefits={false}
+        fallback={
+          <div className="protected-action-placeholder">
+            <button className="action-button details disabled">
+              🔍 View AI Analysis 🔒
+            </button>
+            <div className="auth-hint">
+              <small>Sign in to view detailed AI analysis</small>
+              <div className="quick-auth-buttons">
+                <AuthQuickButton feature="view analysis" />
+              </div>
+            </div>
+          </div>
+        }
+      >
+        <button 
+          onClick={() => onViewDetails(paper, index)}
+          className="action-button details"
+        >
+          🔍 View AI Analysis
+        </button>
+      </ProtectedFeature>
+
+      {/* Download PDF - Protected Feature */}
+      {paper.pdf_url && (
+        <ProtectedFeature
+          feature="download papers"
+          compact={true}
+          showBenefits={false}
+          fallback={
+            <div className="protected-action-placeholder">
+              <button className="action-button download disabled">
+                📄 Download PDF 🔒
+              </button>
+              <div className="auth-hint">
+                <small>Sign in to download papers</small>
+                <div className="quick-auth-buttons">
+                  <AuthQuickButton feature="download papers" />
+                </div>
+              </div>
+            </div>
+          }
+        >
+          <button 
+            onClick={() => onDownloadPaper(paper.pdf_url, paper.title)}
+            className="action-button download"
+          >
+            📄 Download PDF
+          </button>
+        </ProtectedFeature>
+      )}
+
+      {/* Open Online - Always Available */}
+      {paper.url && (
+        <button 
+          onClick={() => window.open(paper.url, '_blank')}
+          className="action-button external"
+        >
+          🔗 Open Online
+        </button>
+      )}
+    </div>
+  );
+};
+
+/**
+ * AuthQuickButton - Quick authentication button for inline use
+ */
+const AuthQuickButton = ({ feature }) => {
+  const { signInWithGoogle } = useAuth();
+  const [loading, setLoading] = React.useState(false);
+
+  const handleQuickAuth = async () => {
+    try {
+      setLoading(true);
+      await signInWithGoogle();
+    } catch (error) {
+      console.error('Quick auth failed:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button 
+      className="quick-auth-btn-mini"
+      onClick={handleQuickAuth}
+      disabled={loading}
+      title={`Sign in with Google to ${feature}`}
+    >
+      {loading ? '...' : '🔐 Sign In'}
+    </button>
+  );
+};
+
+/**
+ * Alternative approach - Replace the entire paper card actions section
+ */
+export const SmartPaperActions = ({ 
+  paper, 
+  index, 
+  onViewDetails, 
+  onDownloadPaper 
+}) => {
+  const { isAuthenticated } = useAuth();
+
+  if (!isAuthenticated) {
+    return (
+      <div className="paper-actions-protected">
+        <div className="protected-features-notice">
+          <div className="notice-content">
+            <span className="notice-icon">🔒</span>
+            <div className="notice-text">
+              <strong>Sign in for full access</strong>
+              <p>Download papers and view detailed AI analysis</p>
+            </div>
+          </div>
+          <div className="notice-actions">
+            <AuthQuickButton feature="access all features" />
+          </div>
+        </div>
+        
+        {/* Show available actions */}
+        <div className="available-actions">
+          {paper.url && (
+            <button 
+              onClick={() => window.open(paper.url, '_blank')}
+              className="action-button external"
+            >
+              🔗 Open Online
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // User is authenticated - show all actions
+  return (
+    <div className="paper-actions">
+      <button 
+        onClick={() => onViewDetails(paper, index)}
+        className="action-button details"
+      >
+        🔍 View AI Analysis
+      </button>
+      {paper.pdf_url && (
+        <button 
+          onClick={() => onDownloadPaper(paper.pdf_url, paper.title)}
+          className="action-button download"
+        >
+          📄 Download PDF
+        </button>
+      )}
+      {paper.url && (
+        <button 
+          onClick={() => window.open(paper.url, '_blank')}
+          className="action-button external"
+        >
+          🔗 Open Online
+        </button>
+      )}
+    </div>
+  );
+};
+
+export default ProtectedPaperActions;
