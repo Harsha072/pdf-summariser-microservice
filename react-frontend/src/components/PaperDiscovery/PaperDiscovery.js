@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { getCachedSearchResults, discoverPapers } from '../../services/api';
-import { AuthButton, ProtectedFeature } from '../Auth/InlineAuth';
+// import { AuthButton, ProtectedFeature } from '../Auth/InlineAuth'; // Currently unused
 import { SmartPaperActions } from './ProtectedPaperFeatures';
 import { useAuth } from '../../context/AuthContext';
 import './PaperDiscovery.css';
 
 const PaperDiscovery = () => {
   const navigate = useNavigate();
-  const { isAuthenticated, user, isAnonymous } = useAuth();
+  const location = useLocation();
+  const { isAuthenticated, user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [uploadedFile, setUploadedFile] = useState(null);
   const [discoveredPapers, setDiscoveredPapers] = useState([]);
@@ -24,12 +25,50 @@ const PaperDiscovery = () => {
     { id: 'google_scholar', name: 'Google Scholar', description: 'Web search for scholarly literature' }
   ];
 
+  const exampleQueries = [
+    "How can machine learning improve medical diagnosis accuracy?",
+    "What are the latest developments in quantum computing for cryptography?",
+    "How does climate change affect biodiversity in marine ecosystems?",
+    "What is the impact of artificial intelligence on cybersecurity?",
+    "How can renewable energy systems be optimized for efficiency?"
+  ];
+
+  // Handle URL parameters for search from history
+  useEffect(() => {
+    const urlParams = new URLSearchParams(location.search);
+    const queryParam = urlParams.get('q');
+    const sourcesParam = urlParams.get('sources');
+    const fromParam = urlParams.get('from');
+    
+    if (queryParam && fromParam === 'history') {
+      console.log('🔄 Repeating search from history:', queryParam);
+      setSearchQuery(queryParam);
+      
+      if (sourcesParam) {
+        const sources = sourcesParam.split(',');
+        setSelectedSources(sources);
+      }
+      
+      // Trigger search automatically after setting parameters
+      setTimeout(() => {
+        const searchButton = document.querySelector('.search-button');
+        if (searchButton) {
+          searchButton.click();
+        }
+      }, 100);
+      
+      // Clear URL parameters
+      navigate('/', { replace: true });
+    }
+  }, [location.search, navigate]);
+
   // Check for cached results on page load
   useEffect(() => {
     const loadCachedResults = async () => {
       try {
-        console.log("page reload")
+        console.log("🔄 Loading cached results on page reload...")
         const cachedData = await getCachedSearchResults();
+        console.log("📋 Cached data response:", cachedData);
         if (cachedData.success && cachedData.has_cache) {
           if (cachedData.results && cachedData.results.length > 0) {
             // Load the most recent search results
@@ -201,9 +240,10 @@ const PaperDiscovery = () => {
               <textarea
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Enter your research question or topic (e.g., 'machine learning for climate change prediction')"
+                placeholder="Enter your complete research question, e.g., 'How can machine learning improve medical diagnosis accuracy?' or 'What are the latest advances in quantum computing for cryptography?'"
                 rows={3}
                 className="search-textarea"
+                maxLength={500}
               />
               
               <div className="input-actions">
@@ -242,6 +282,40 @@ const PaperDiscovery = () => {
             >
               {isLoading ? 'Discovering...' : 'Discover Papers'}
             </button>
+          </div>
+          
+          {/* Search Tips and Examples */}
+          <div className="search-guidance">
+            <div className="search-tips">
+              <h4>💡 Search Tips:</h4>
+              <ul>
+                <li>Use <strong>complete research questions</strong> for better results</li>
+                <li>Include <strong>specific domains</strong>: "machine learning in healthcare"</li>
+                <li>Mention <strong>methodologies</strong>: "using deep neural networks"</li>
+                <li>Be specific about <strong>applications</strong>: "for cancer detection"</li>
+              </ul>
+            </div>
+            
+            <div className="example-queries">
+              <h4>📝 Example Research Questions:</h4>
+              <div className="example-buttons">
+                {[
+                  "How can AI improve cancer diagnosis accuracy?",
+                  "What are the latest advances in quantum machine learning?",
+                  "How effective is deep learning for natural language processing?",
+                  "What are the ethical implications of AI in healthcare?"
+                ].map((example, index) => (
+                  <button 
+                    key={index}
+                    onClick={() => setSearchQuery(example)}
+                    className="example-button"
+                    type="button"
+                  >
+                    {example}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -359,6 +433,40 @@ const PaperDiscovery = () => {
                 />
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* No results message */}
+      {searchQuery && !isLoading && discoveredPapers.length === 0 && !error && (
+        <div className="no-results-section">
+          <div className="no-results-content">
+            <div className="no-results-icon">📋</div>
+            <h3>No Papers Found</h3>
+            <p>We couldn't find any papers matching your research question.</p>
+            <div className="no-results-suggestions">
+              <h4>Try these suggestions:</h4>
+              <ul>
+                <li>Use broader or different keywords</li>
+                <li>Check spelling of technical terms</li>
+                <li>Try rephrasing your research question</li>
+                <li>The academic databases might be temporarily unavailable - try again in a few minutes</li>
+              </ul>
+            </div>
+            <div className="no-results-examples">
+              <p>Or try one of these example searches:</p>
+              <div className="example-queries">
+                {exampleQueries.map((example, index) => (
+                  <button
+                    key={index}
+                    className="example-button"
+                    onClick={() => setSearchQuery(example)}
+                  >
+                    {example}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       )}

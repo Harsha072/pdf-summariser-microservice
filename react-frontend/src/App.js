@@ -5,7 +5,7 @@ import Header from './components/Header/Header';
 import PaperDiscovery from './components/PaperDiscovery/PaperDiscovery';
 import PaperDetails from './components/PaperDetails/PaperDetails';
 import SideNavigation from './components/SideNavigation/SideNavigation';
-import SearchHistory from './pages/SearchHistory';
+import SearchHistoryPage from './pages/SearchHistory';
 import SavedPapers from './pages/SavedPapers';
 import HelpGuide from './pages/HelpGuide';
 import UserProfile from './pages/UserProfile';
@@ -82,7 +82,7 @@ function App() {
               <Routes>
                 <Route path="/" element={<PaperDiscovery />} />
                 <Route path="/paper-details/:paperId" element={<PaperDetails />} />
-                <Route path="/history" element={<SearchHistory />} />
+                <Route path="/history" element={<SearchHistoryPage />} />
                 <Route path="/saved" element={<SavedPapers />} />
                 <Route path="/help" element={<HelpGuide />} />
                 <Route path="/profile" element={<UserProfile />} />

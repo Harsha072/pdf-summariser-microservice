@@ -13,7 +13,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Flask and web framework imports
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, Response
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
@@ -50,7 +50,22 @@ logger = logging.getLogger(__name__)
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app, origins="*", methods=['GET', 'POST', 'OPTIONS'], allow_headers=['Content-Type'])
+CORS(app, 
+     origins=["http://localhost:3000", "http://127.0.0.1:3000"], 
+     methods=['GET', 'POST', 'OPTIONS'], 
+     allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'],
+     supports_credentials=True)
+
+# Handle preflight requests manually for extra compatibility
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        response = Response()
+        response.headers.add("Access-Control-Allow-Origin", request.headers.get('Origin', '*'))
+        response.headers.add('Access-Control-Allow-Headers', "Content-Type,Authorization,X-Requested-With")
+        response.headers.add('Access-Control-Allow-Methods', "GET,POST,OPTIONS")
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
 
 # Firebase authentication decorator
 def firebase_auth_required(f):
@@ -252,6 +267,11 @@ class RedisCacheManager:
             return False
         
         try:
+            # Check if paper is None or not a dictionary
+            if not paper or not isinstance(paper, dict):
+                self.logger.warning("Cannot cache paper details: paper is None or not a dictionary")
+                return False
+                
             paper_id = paper.get('id') or paper.get('title', 'unknown')
             cache_key = self._generate_cache_key("paper_details", paper_id)
             
@@ -276,6 +296,11 @@ class RedisCacheManager:
             return None
         
         try:
+            # Check if paper is None or not a dictionary
+            if not paper or not isinstance(paper, dict):
+                self.logger.warning("Cannot get cached paper details: paper is None or not a dictionary")
+                return None
+                
             paper_id = paper.get('id') or paper.get('title', 'unknown')
             cache_key = self._generate_cache_key("paper_details", paper_id)
             cached_data = self.redis_client.get(cache_key)
@@ -538,6 +563,11 @@ class RedisCacheManager:
             return False
         
         try:
+            # Check if paper is None or not a dictionary
+            if not paper or not isinstance(paper, dict):
+                self.logger.warning("Cannot cache paper details: paper is None or not a dictionary")
+                return False
+                
             # Generate cache key from paper title and authors
             title = paper.get('title', 'unknown')
             authors = paper.get('authors', [])
@@ -570,6 +600,11 @@ class RedisCacheManager:
             return None
         
         try:
+            # Check if paper is None or not a dictionary
+            if not paper or not isinstance(paper, dict):
+                self.logger.warning("Cannot get cached paper details: paper is None or not a dictionary")
+                return None
+                
             # Generate same cache key as used for caching
             title = paper.get('title', 'unknown')
             authors = paper.get('authors', [])
@@ -762,6 +797,21 @@ class RedisCacheManager:
             self.logger.error(f"Failed to get session search history: {e}")
             return []
 
+    def clear_session_search_history(self, session_id: str) -> bool:
+        """Clear session-based search history (for anonymous users)"""
+        if not self.enabled or not session_id:
+            return False
+        
+        try:
+            history_key = f"session_search_history:{session_id}"
+            self.redis_client.delete(history_key)
+            self.logger.info(f"Cleared session search history for session: {session_id}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to clear session search history: {e}")
+            return False
+
 
 # Initialize cache manager
 cache_manager = RedisCacheManager(redis_client)
@@ -889,119 +939,381 @@ class ArxivSearcher:
         self.logger = logger
     
     def search(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
-        """Search arXiv for papers"""
+        """Search arXiv for papers with improved query handling"""
         if not arxiv:
             self.logger.warning("arXiv library not available")
             return []
         
         try:
+            # Clean and optimize query for arXiv
+            cleaned_query = self._optimize_arxiv_query(query)
+            
             search = arxiv.Search(
-                query=query,
+                query=cleaned_query,
                 max_results=max_results,
                 sort_by=arxiv.SortCriterion.Relevance
             )
             
-            papers = []
-            for result in search.results():
-                paper = {
-                    "id": result.entry_id.split('/')[-1],
-                    "title": result.title,
-                    "authors": [str(author) for author in result.authors],
-                    "summary": result.summary,
-                    "url": result.entry_id,
-                    "pdf_url": result.pdf_url,
-                    "published": result.published.strftime('%Y-%m-%d') if result.published else None,
-                    "categories": result.categories,
-                    "source": "arXiv"
-                }
-                papers.append(paper)
+            # Use client with better error handling
+            client = arxiv.Client(
+                page_size=10,  # Smaller page size to reduce server load
+                delay_seconds=3,  # Respect rate limits
+                num_retries=2  # Fewer retries to avoid long waits
+            )
             
-            self.logger.info(f"Found {len(papers)} papers from arXiv")
+            papers = []
+            try:
+                for result in client.results(search):
+                    paper = {
+                        "id": result.entry_id.split('/')[-1],
+                        "title": result.title,
+                        "authors": [str(author) for author in result.authors],
+                        "summary": result.summary,
+                        "url": result.entry_id,
+                        "pdf_url": result.pdf_url,
+                        "published": result.published.strftime('%Y-%m-%d') if result.published else None,
+                        "categories": result.categories,
+                        "source": "arXiv"
+                    }
+                    papers.append(paper)
+                    
+                    # Limit results to avoid timeout issues
+                    if len(papers) >= max_results:
+                        break
+                        
+            except Exception as iteration_error:
+                self.logger.warning(f"ArXiv iteration error (continuing with partial results): {iteration_error}")
+            
+            self.logger.info(f"Found {len(papers)} papers from arXiv for query: {cleaned_query[:50]}...")
             return papers
             
         except Exception as e:
             self.logger.error(f"arXiv search failed: {e}")
             return []
 
+    def _optimize_arxiv_query(self, query: str) -> str:
+        """Optimize query for arXiv search"""
+        # Remove question words that don't help search
+        stop_words = ['how', 'what', 'why', 'when', 'where', 'can', 'does', 'is', 'are', 'the', 'a', 'an']
+        
+        # Convert to lowercase and split
+        words = query.lower().split()
+        
+        # Remove stop words but keep important technical terms
+        filtered_words = []
+        for word in words:
+            # Keep the word if it's not a stop word or if it's a technical term
+            if word not in stop_words or len(word) > 6:  # Keep longer words even if they're stop words
+                filtered_words.append(word)
+        
+        # If query is still very long, take first 10 words
+        if len(filtered_words) > 10:
+            filtered_words = filtered_words[:10]
+        
+        optimized = ' '.join(filtered_words)
+        
+        # If optimization removed too much, use original
+        if len(optimized) < len(query) * 0.3:  # If less than 30% remains
+            return query
+        
+        return optimized
 
-class SemanticScholarSearcher:
-    """Search Semantic Scholar for academic papers"""
+
+class OpenAlexSearcher:
+    """Search OpenAlex for academic papers - better alternative with higher rate limits"""
     
     def __init__(self):
+        self.base_url = "https://api.openalex.org/works"
         self.logger = logger
-        self.base_url = "https://api.semanticscholar.org/graph/v1/paper/search"
+        self.session = requests.Session()
+        
+        # Add polite headers (OpenAlex requests this)
+        self.session.headers.update({
+            'User-Agent': 'Academic Paper Discovery Engine (mailto:research@academicpapers.com)',
+            'Accept': 'application/json'
+        })
     
-    def search(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
-        """Search Semantic Scholar for papers"""
+    def search(self, query_params: str, max_results: int = 10) -> List[Dict[str, Any]]:
+        """
+        Search OpenAlex using optimized query parameters
+        
+        Args:
+            query_params: URL-ready query string from intent extraction OR plain query text
+            max_results: Maximum number of results to return
+        """
         try:
-            params = {
-                'query': query,
-                'limit': min(max_results, 100),  # API limit
-                'fields': 'title,authors,abstract,url,year,citationCount,publicationDate,journal'
+            self.logger.info(f"🔍 OpenAlex search input: {query_params[:100]}...")
+            
+            # Build the complete API URL
+            search_url = self.build_search_url(query_params, limit=max_results)
+            
+            response = self.session.get(search_url, timeout=30)
+            
+            if response.status_code == 200:
+                data = response.json()
+                results = data.get('results', [])
+                
+                self.logger.info(f"✅ OpenAlex found {len(results)} papers")
+                
+                # Convert OpenAlex format to our standard format
+                papers = []
+                for work in results:
+                    paper = self._convert_openalex_work(work)
+                    if paper:
+                        papers.append(paper)
+                
+                return papers
+            else:
+                self.logger.error(f"OpenAlex API error: {response.status_code} - {response.text[:200]}")
+                return []
+                
+        except Exception as e:
+            self.logger.error(f"OpenAlex search failed: {e}")
+            return []
+    
+    def build_search_url(self, query_params: str, limit: int = 10) -> str:
+        """
+        Build OpenAlex API URL from query parameters
+        
+        Args:
+            query_params: URL-encoded query string from intent extraction
+            limit: Number of results
+        """
+        # Parse existing query params
+        params_dict = urllib.parse.parse_qs(query_params) if '=' in query_params else {}
+        
+        # Extract query from params or use entire string as query
+        if 'search' in params_dict:
+            search_query = params_dict['search'][0]
+        elif 'query' in params_dict:
+            search_query = params_dict['query'][0]
+        else:
+            search_query = query_params
+        
+        # Build OpenAlex parameters
+        params = {
+            'search': search_query,
+            'per-page': min(limit, 200),  # OpenAlex max per page
+            'sort': 'relevance_score:desc',
+            'filter': 'type:article',  # Only research articles
+            'select': 'id,title,display_name,publication_year,publication_date,doi,open_access,authorships,abstract_inverted_index,concepts,cited_by_count,is_retracted,language,primary_location,locations'
+        }
+        
+        url = f"{self.base_url}?" + urllib.parse.urlencode(params)
+        self.logger.info(f"🔍 OpenAlex URL: {url}")
+        return url
+    
+    def _convert_openalex_work(self, work: Dict) -> Optional[Dict[str, Any]]:
+        """Convert OpenAlex work format to our standard paper format"""
+        try:
+            # Extract basic info
+            paper_id = work.get('id', '').split('/')[-1] if work.get('id') else str(uuid.uuid4())
+            title = work.get('display_name', 'Unknown Title')
+            
+            # Extract authors
+            authors = []
+            for authorship in work.get('authorships', []):
+                author = authorship.get('author', {})
+                author_name = author.get('display_name')
+                if author_name:
+                    authors.append(author_name)
+            
+            # Extract abstract from inverted index
+            abstract = self._reconstruct_abstract(work.get('abstract_inverted_index', {}))
+            
+            # Extract publication info
+            pub_year = work.get('publication_year')
+            pub_date = work.get('publication_date', '')
+            
+            # Extract URL and DOI
+            doi = work.get('doi')
+            url = work.get('id', '')  # OpenAlex ID as URL
+            
+            # Primary location (journal/venue info)
+            primary_location = work.get('primary_location', {})
+            source_name = primary_location.get('source', {}).get('display_name', 'Unknown Source')
+            
+            # PDF access
+            pdf_url = ''
+            open_access = work.get('open_access', {})
+            if open_access.get('is_oa'):
+                # Look for PDF in locations
+                for location in work.get('locations', []):
+                    if location.get('pdf_url'):
+                        pdf_url = location['pdf_url']
+                        break
+                
+                # Fallback to DOI URL if no direct PDF
+                if not pdf_url and doi:
+                    pdf_url = f"https://doi.org/{doi}"
+            
+            # Citation count
+            citation_count = work.get('cited_by_count', 0)
+            
+            # Extract concepts (research topics)
+            concepts = []
+            for concept in work.get('concepts', [])[:5]:  # Top 5 concepts
+                concept_name = concept.get('display_name')
+                if concept_name:
+                    concepts.append(concept_name)
+            
+            return {
+                "id": paper_id,
+                "title": title,
+                "authors": authors,
+                "summary": abstract,
+                "url": url,
+                "pdf_url": pdf_url,
+                "published": pub_date or str(pub_year) if pub_year else '',
+                "citation_count": citation_count,
+                "journal": source_name,
+                "source": "OpenAlex",
+                "concepts": concepts,
+                "is_open_access": open_access.get('is_oa', False),
+                "doi": doi,
+                "language": work.get('language', 'en')
             }
             
-            response = requests.get(
-                self.base_url, 
-                params=params, 
-                timeout=config.REQUEST_TIMEOUT
-            )
-            response.raise_for_status()
+        except Exception as e:
+            self.logger.warning(f"Error converting OpenAlex work: {e}")
+            return None
+    
+    def _reconstruct_abstract(self, inverted_index: Dict) -> str:
+        """Reconstruct abstract from OpenAlex inverted index format"""
+        if not inverted_index:
+            return "No abstract available"
+        
+        try:
+            # Create word-position pairs
+            word_positions = []
+            for word, positions in inverted_index.items():
+                for pos in positions:
+                    word_positions.append((pos, word))
             
-            data = response.json()
-            papers = []
+            # Sort by position and reconstruct
+            word_positions.sort(key=lambda x: x[0])
+            abstract_words = [word for pos, word in word_positions]
             
-            for paper_data in data.get('data', []):
-                paper = {
-                    "id": paper_data.get('paperId', str(uuid.uuid4())),
-                    "title": paper_data.get('title', 'Unknown Title'),
-                    "authors": [author.get('name', 'Unknown') 
-                              for author in paper_data.get('authors', [])],
-                    "summary": paper_data.get('abstract', 'No abstract available'),
-                    "url": paper_data.get('url', ''),
-                    "pdf_url": paper_data.get('url', ''),
-                    "published": paper_data.get('publicationDate', ''),
-                    "citation_count": paper_data.get('citationCount', 0),
-                    "journal": paper_data.get('journal', {}).get('name', 'Unknown Journal'),
-                    "source": "Semantic Scholar"
-                }
-                papers.append(paper)
+            # Join words and clean up
+            abstract = ' '.join(abstract_words)
             
-            self.logger.info(f"Found {len(papers)} papers from Semantic Scholar")
-            return papers
+            # Limit length
+            if len(abstract) > 500:
+                abstract = abstract[:500] + "..."
+            
+            return abstract
             
         except Exception as e:
-            self.logger.error(f"Semantic Scholar search failed: {e}")
-            return []
+            self.logger.warning(f"Error reconstructing abstract: {e}")
+            return "Abstract processing error"
 
 
 class GoogleScholarSearcher:
-    """Search Google Scholar using web scraping"""
+    """Search Google Scholar using web scraping with better bot detection avoidance"""
     
     def __init__(self):
         self.logger = logger
-        self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
+        self.last_request_time = 0
+        self.min_delay = 3  # Minimum 3 seconds between requests
+        self.session = requests.Session()
+        self.consecutive_failures = 0
+        self.max_failures = 3  # Disable after 3 consecutive failures
+        
+        # Rotate through different realistic headers
+        self.headers_list = [
+            {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            },
+            {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+            }
+        ]
     
     def search(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
-        """Search Google Scholar with web scraping"""
+        """Search Google Scholar with improved bot detection avoidance"""
         try:
-            search_url = f"https://scholar.google.com/scholar?q={urllib.parse.quote(query)}&num={max_results}"
+            # Rate limiting - wait if needed
+            current_time = time.time()
+            elapsed = current_time - self.last_request_time
+            if elapsed < self.min_delay:
+                wait_time = self.min_delay - elapsed
+                self.logger.info(f"Waiting {wait_time:.1f}s for Google Scholar rate limiting...")
+                time.sleep(wait_time)
             
-            response = requests.get(
+            # Use rotating headers
+            headers = self.headers_list[int(time.time()) % len(self.headers_list)]
+            
+            # Build search URL with additional parameters to look more natural
+            params = {
+                'q': query,
+                'num': min(max_results, 20),  # Google Scholar max per page
+                'start': 0,
+                'hl': 'en'
+            }
+            
+            search_url = "https://scholar.google.com/scholar?" + urllib.parse.urlencode(params)
+            self.logger.info(f"Searching Google Scholar: {query[:50]}...")
+            
+            response = self.session.get(
                 search_url, 
-                headers=self.headers, 
-                timeout=config.REQUEST_TIMEOUT
+                headers=headers, 
+                timeout=config.REQUEST_TIMEOUT,
+                allow_redirects=True
             )
             
-            if response.status_code != 200:
-                self.logger.warning(f"Google Scholar returned status {response.status_code}")
+            self.last_request_time = time.time()
+            
+            # Handle different response codes
+            if response.status_code == 429:
+                self.consecutive_failures += 1
+                self.logger.warning(f"Google Scholar rate limit (429) - try again later (failure {self.consecutive_failures})")
+                if self.consecutive_failures >= self.max_failures:
+                    self.logger.error("Google Scholar repeatedly failing - consider using only ArXiv and Semantic Scholar")
+                return []
+            elif response.status_code == 403:
+                self.consecutive_failures += 1
+                self.logger.warning(f"Google Scholar blocked request (403) - possible bot detection (failure {self.consecutive_failures})")
+                return []
+            elif response.status_code != 200:
+                self.consecutive_failures += 1
+                self.logger.warning(f"Google Scholar returned status {response.status_code} (failure {self.consecutive_failures})")
+                return []
+            
+            # Check for CAPTCHA or block page
+            if "captcha" in response.text.lower() or "unusual traffic" in response.text.lower():
+                self.logger.warning("Google Scholar detected unusual traffic - CAPTCHA required")
                 return []
             
             soup = BeautifulSoup(response.content, 'html.parser')
             papers = []
             
-            for result in soup.find_all('div', class_='gs_r gs_or gs_scl')[:max_results]:
+            # Try multiple selectors as Google Scholar changes their classes
+            result_selectors = [
+                'div.gs_r.gs_or.gs_scl',  # Current format
+                'div[data-lid]',          # Alternative format
+                'div.gs_ri'               # Older format
+            ]
+            
+            results = []
+            for selector in result_selectors:
+                results = soup.select(selector)
+                if results:
+                    break
+            
+            if not results:
+                self.logger.warning("No results found - Google Scholar may have changed structure")
+                return []
+            
+            for result in results[:max_results]:
                 try:
                     paper = self._parse_scholar_result(result)
                     if paper:
@@ -1011,43 +1323,97 @@ class GoogleScholarSearcher:
                     continue
             
             self.logger.info(f"Found {len(papers)} papers from Google Scholar")
+            
+            # Reset failure count on success
+            if papers:
+                self.consecutive_failures = 0
+            
             return papers
             
+        except requests.exceptions.Timeout:
+            self.logger.error("Google Scholar request timed out")
+            return []
+        except requests.exceptions.ConnectionError:
+            self.logger.error("Failed to connect to Google Scholar")
+            return []
         except Exception as e:
             self.logger.error(f"Google Scholar search failed: {e}")
             return []
     
     def _parse_scholar_result(self, result) -> Optional[Dict[str, Any]]:
-        """Parse individual Google Scholar search result"""
-        title_elem = result.find('h3', class_='gs_rt')
-        if not title_elem:
+        """Parse individual Google Scholar search result with multiple format support"""
+        try:
+            # Try multiple title selectors
+            title_elem = None
+            title_selectors = ['h3.gs_rt', 'h3', '.gs_rt', '[data-lid] h3']
+            
+            for selector in title_selectors:
+                title_elem = result.select_one(selector)
+                if title_elem:
+                    break
+            
+            if not title_elem:
+                return None
+            
+            # Clean title text
+            title = title_elem.get_text(strip=True)
+            
+            # Remove citation markers like [PDF], [HTML], etc.
+            title = re.sub(r'\[PDF\]|\[HTML\]|\[CITATION\]', '', title).strip()
+            
+            if not title or len(title) < 10:  # Skip if title too short
+                return None
+            
+            # Extract authors and publication info
+            authors = []
+            authors_elem = result.select_one('.gs_a')
+            if authors_elem:
+                authors_text = authors_elem.get_text()
+                # Authors are usually before the first dash
+                author_part = authors_text.split('-')[0] if '-' in authors_text else authors_text
+                authors = [author.strip() for author in author_part.split(',')[:5] if author.strip()]
+            
+            # Extract summary/snippet
+            summary = "No summary available"
+            summary_selectors = ['.gs_rs', '.gs_ri .gs_fl', '.gs_ri']
+            
+            for selector in summary_selectors:
+                summary_elem = result.select_one(selector)
+                if summary_elem:
+                    summary = summary_elem.get_text(strip=True)
+                    if len(summary) > 20:  # Only use if substantial content
+                        break
+            
+            # Extract URL
+            url = ""
+            link_elem = title_elem.find('a')
+            if link_elem and link_elem.get('href'):
+                url = link_elem.get('href')
+                # Handle relative URLs
+                if url.startswith('/'):
+                    url = 'https://scholar.google.com' + url
+            
+            # Extract year if available
+            year = ""
+            if authors_elem:
+                year_match = re.search(r'\b(19|20)\d{2}\b', authors_elem.get_text())
+                if year_match:
+                    year = year_match.group()
+            
+            return {
+                "id": str(uuid.uuid4()),
+                "title": title,
+                "authors": authors,
+                "summary": summary[:500],  # Limit summary length
+                "url": url,
+                "pdf_url": url,
+                "published": year,
+                "source": "Google Scholar"
+            }
+            
+        except Exception as e:
+            self.logger.debug(f"Error parsing Google Scholar result: {e}")
             return None
-        
-        title = title_elem.get_text(strip=True)
-        
-        # Extract authors and publication info
-        authors_elem = result.find('div', class_='gs_a')
-        authors_text = authors_elem.get_text() if authors_elem else ""
-        authors = [author.strip() for author in authors_text.split('-')[0].split(',')[:5]]
-        
-        # Extract summary
-        summary_elem = result.find('span', class_='gs_rs')
-        summary = summary_elem.get_text(strip=True) if summary_elem else "No summary available"
-        
-        # Extract URL
-        link_elem = title_elem.find('a')
-        url = link_elem.get('href') if link_elem else ""
-        
-        return {
-            "id": str(uuid.uuid4()),
-            "title": title,
-            "authors": [author for author in authors if author],
-            "summary": summary,
-            "url": url,
-            "pdf_url": url,
-            "published": "",
-            "source": "Google Scholar"
-        }
 
 
 class RelevanceScorer:
@@ -1281,11 +1647,12 @@ class AcademicPaperDiscoveryEngine:
     
     def __init__(self):
         self.logger = logger
+        self.openai_client = openai_client  # Store OpenAI client as instance variable
         
         # Initialize components
         self.research_extractor = ResearchFocusExtractor(openai_client)
         self.arxiv_searcher = ArxivSearcher()
-        self.semantic_searcher = SemanticScholarSearcher()
+        self.openalex_searcher = OpenAlexSearcher()  # 🚀 NEW: OpenAlex instead of Semantic Scholar
         self.scholar_searcher = GoogleScholarSearcher()
         self.relevance_scorer = RelevanceScorer(openai_client)
         self.duplicate_remover = DuplicateRemover(config.DUPLICATE_THRESHOLD)
@@ -1293,67 +1660,190 @@ class AcademicPaperDiscoveryEngine:
         
         self.logger.info("Academic Paper Discovery Engine initialized")
     
+    def extract_search_intent(self, research_input: str) -> Dict[str, Any]:
+        """Extract search intent and optimize queries for different academic databases"""
+        try:
+            if not self.openai_client:
+                # Fallback if OpenAI is not available
+                return {
+                    "arxiv_query": research_input.strip(),
+                    "openalex_query": research_input.strip(),
+                    "openalex_url_params": f"search={urllib.parse.quote(research_input.strip())}",
+                    "primary_keywords": research_input.split()[:5],
+                    "research_domain": "Computer Science",
+                    "intent_confidence": 0.5
+                }
+            
+            prompt = f"""You are an expert academic search query optimizer. Analyze the user's research question and create optimized search parameters for academic databases.
+
+    User's Research Question: "{research_input}"
+
+    Generate the following optimized search parameters:
+
+    1. ARXIV_QUERY: Technical keyword query for arXiv (remove question words, focus on key technical terms, max 6-8 words)
+    2. OPENALEX_QUERY: Natural language query for OpenAlex (preserve meaning, works excellently with full questions and natural language)
+    3. OPENALEX_URL_PARAMS: URL-encoded search string ready for OpenAlex API (natural language friendly, focus on key concepts)
+    4. PRIMARY_KEYWORDS: 3-5 most important technical keywords/phrases for relevance scoring
+    5. RESEARCH_DOMAIN: Specific academic field (e.g., "Computer Science - AI", "Software Engineering", "Machine Learning")
+    6. INTENT_CONFIDENCE: Confidence level (0.1-1.0) in understanding the research intent
+
+    CRITICAL GUIDELINES for OpenAlex queries:
+    - OpenAlex works VERY well with natural language queries
+    - You can keep question words and natural phrasing - OpenAlex understands context
+    - Focus on preserving the research intent and context
+    - Remove only unnecessary filler words and conversational phrases
+    - OpenAlex understands concepts and relationships extremely well
+    - Natural language is preferred over just keywords
+
+    Examples:
+    - Input: "How do AI code assistants affect software maintainability?"
+    - OpenAlex: "AI code assistants software maintainability impact programming development"
+    - Input: "What are the latest advances in quantum computing?"
+    - OpenAlex: "latest advances quantum computing recent developments breakthrough"
+    - Input: "How does machine learning improve medical diagnosis?"
+    - OpenAlex: "machine learning medical diagnosis improvement accuracy healthcare"
+
+    Respond in JSON format:
+    {{
+        "arxiv_query": "optimized technical keywords",
+        "openalex_query": "natural language research query", 
+        "openalex_url_params": "search_ready_query_string",
+        "primary_keywords": ["keyword1", "keyword2", "keyword3"],
+        "research_domain": "Specific Academic Field",
+        "intent_confidence": 0.8
+    }}"""            # Use LangChain's ChatOpenAI invoke method
+            response = self.openai_client.invoke(prompt)
+            
+            # LangChain returns the content directly
+            result = json.loads(response.content.strip())
+            
+            # Validate and enhance the result
+            required_keys = ['arxiv_query', 'openalex_query', 'openalex_url_params', 'primary_keywords', 'research_domain', 'intent_confidence']
+            if all(key in result for key in required_keys):
+                # Ensure URL params are properly formatted for OpenAlex
+                if not result['openalex_url_params'].startswith('search='):
+                    result['openalex_url_params'] = f"search={result['openalex_url_params']}"
+                
+                self.logger.info(f"Successfully extracted search intent: {result['research_domain']}")
+                return result
+            else:
+                raise ValueError("Missing required keys in OpenAI response")
+                
+        except json.JSONDecodeError as e:
+            self.logger.warning(f"Failed to parse OpenAI JSON response, using fallback: {e}")
+            return self._fallback_intent_extraction_openalex(research_input)
+        except AttributeError as e:
+            self.logger.warning(f"OpenAI client method error, using fallback: {e}")
+            return self._fallback_intent_extraction_openalex(research_input)
+        except Exception as e:
+            self.logger.warning(f"Intent extraction failed, using fallback: {e}")
+            return self._fallback_intent_extraction_openalex(research_input)
+
+    def _fallback_intent_extraction_openalex(self, research_input: str) -> Dict[str, Any]:
+        """Fallback method for intent extraction when OpenAI fails - OpenAlex version"""
+        import urllib.parse
+        
+        # Clean the query for URL parameters
+        words = research_input.lower().split()
+        stop_words = ['how', 'what', 'why', 'when', 'where', 'can', 'does', 'is', 'are', 
+                    'the', 'a', 'an', 'i', 'you', 'we', 'they', 'me', 'my', 'your',
+                    'want', 'find', 'look', 'search', 'paper', 'papers', 'research']
+        
+        keywords = [w for w in words if w not in stop_words and len(w) > 2][:6]
+        url_query = ' '.join(keywords)
+        
+        return {
+            "arxiv_query": ' '.join(keywords),
+            "openalex_query": research_input.strip(),
+            "openalex_url_params": f"search={urllib.parse.quote(url_query)}",
+            "primary_keywords": keywords,
+            "research_domain": "Computer Science",
+            "intent_confidence": 0.3
+        }
+
     def discover_papers(self, research_input: str, sources: List[str] = None, 
                        max_results: int = 10) -> Dict[str, Any]:
         """Main method to discover relevant academic papers"""
         try:
             if sources is None:
-                sources = ["arxiv", "semantic_scholar"]
+                sources = ["arxiv", "openalex"]
             
             max_results = min(max_results, config.MAX_ALLOWED_RESULTS)
             
             self.logger.info(f"Starting paper discovery for query: {research_input[:100]}...")
             
-            # Extract research focus
+            # Extract research focus for analysis and scoring
             research_focus = self.research_extractor.extract_research_focus(research_input)
             
-            # Create search query
-            query_parts = [research_focus['topic']]
-            query_parts.extend(research_focus['keywords'][:5])
-            search_query = ' '.join(query_parts)
+            # ✨ NEW: Use AI-powered intent detection to optimize queries for each database
+            search_intent = self.extract_search_intent(research_input)
             
-            self.logger.info(f"Search query: {search_query}")
+            self.logger.info(f"Intent detection - Domain: {search_intent.get('research_domain', 'unknown')}")
+            self.logger.info(f"Intent detection - Confidence: {search_intent.get('intent_confidence', 0)}")
             
-            # Search multiple sources concurrently
+            # Use optimized queries for each source
+            arxiv_query = search_intent.get('arxiv_query', research_input.strip())
+            openalex_url_params = search_intent.get('openalex_url_params', f"search={urllib.parse.quote(research_input.strip())}")
+            
+            self.logger.info(f"ArXiv query: {arxiv_query}")
+            self.logger.info(f"OpenAlex URL params: {openalex_url_params}")
+            
+            # Search multiple sources concurrently with optimized queries
             all_papers = []
             with ThreadPoolExecutor(max_workers=config.MAX_WORKERS) as executor:
                 futures = []
                 
                 if "arxiv" in sources:
-                    futures.append(executor.submit(self.arxiv_searcher.search, search_query, max_results))
+                    futures.append(executor.submit(self.arxiv_searcher.search, arxiv_query, max_results))
                 
-                if "semantic_scholar" in sources:
-                    futures.append(executor.submit(self.semantic_searcher.search, search_query, max_results))
+                if "openalex" in sources:
+                    futures.append(executor.submit(self.openalex_searcher.search, openalex_url_params, max_results))
                 
                 if "google_scholar" in sources:
-                    futures.append(executor.submit(self.scholar_searcher.search, search_query, max_results))
+                    # For Google Scholar, use the original research question as it works well with natural language
+                    futures.append(executor.submit(self.scholar_searcher.search, research_input.strip(), max_results))
                 
                 # Collect results
                 for future in as_completed(futures):
                     try:
                         papers = future.result()
-                        all_papers.extend(papers)
+                        if papers:
+                            # Filter out None values and invalid papers
+                            valid_papers = [p for p in papers if p and isinstance(p, dict) and p.get('title')]
+                            all_papers.extend(valid_papers)
                     except Exception as e:
                         self.logger.error(f"Search source failed: {e}")
             
             # Remove duplicates
             unique_papers = self.duplicate_remover.remove_duplicates(all_papers)
             
-            # Calculate relevance scores with error handling
+            # Calculate relevance scores with enhanced context from AI intent detection
             for paper in unique_papers:
                 try:
                     if paper and isinstance(paper, dict):
+                        # Enhance research focus with intent data for better scoring
+                        enhanced_research_focus = research_focus.copy()
+                        if search_intent.get('primary_keywords'):
+                            enhanced_research_focus['ai_keywords'] = search_intent['primary_keywords']
+                        if search_intent.get('research_domain'):
+                            enhanced_research_focus['ai_domain'] = search_intent['research_domain']
+                        
                         paper['relevance_score'] = self.relevance_scorer.calculate_relevance_score(
-                            paper, research_focus
+                            paper, enhanced_research_focus
                         )
                     else:
-                        paper['relevance_score'] = 25.0  # Default score
+                        self.logger.warning(f"Skipping invalid paper object: {type(paper)}")
+                        if isinstance(paper, dict):
+                            paper['relevance_score'] = 25.0  # Default score
                 except Exception as e:
                     self.logger.warning(f"Failed to score paper: {e}")
-                    paper['relevance_score'] = 25.0  # Default score
+                    if paper and isinstance(paper, dict):
+                        paper['relevance_score'] = 25.0  # Default score
             
             # Sort by relevance score safely
             try:
+                # Filter out any remaining None values before sorting
+                unique_papers = [p for p in unique_papers if p and isinstance(p, dict)]
                 unique_papers.sort(key=lambda x: float(x.get('relevance_score', 0)), reverse=True)
             except Exception as e:
                 self.logger.warning(f"Failed to sort papers: {e}")
@@ -1362,15 +1852,62 @@ class AcademicPaperDiscoveryEngine:
             # Limit final results
             final_papers = unique_papers[:max_results]
             
+            # Add status information based on results
+            status_info = {}
+            if len(final_papers) == 0:
+                if len(all_papers) == 0:
+                    # Check if Google Scholar was requested and likely failed
+                    google_scholar_requested = "google_scholar" in sources
+                    
+                    message = "No papers found. This could be due to API rate limits or service unavailability."
+                    suggestions = [
+                        "Try broader keywords",
+                        "Check if your research area exists in academic databases",
+                    ]
+                    
+                    if google_scholar_requested:
+                        message += " Google Scholar has strict rate limiting and may block automated requests."
+                        suggestions.extend([
+                            "Try using only ArXiv and Semantic Scholar sources",
+                            "For Google Scholar results, search manually at scholar.google.com",
+                            "Wait several minutes before trying Google Scholar again"
+                        ])
+                    else:
+                        suggestions.append("Retry in a few minutes (APIs may be temporarily unavailable)")
+                    
+                    status_info = {
+                        "status": "no_results",
+                        "message": message,
+                        "suggestions": suggestions
+                    }
+                else:
+                    status_info = {
+                        "status": "filtered_out",
+                        "message": "Papers were found but filtered out during deduplication."
+                    }
+            else:
+                status_info = {
+                    "status": "success",
+                    "message": f"Found {len(final_papers)} relevant papers"
+                }
+
             result = {
-                "success": True,
+                "success": len(final_papers) > 0,
                 "research_focus": research_focus,
                 "papers": final_papers,
                 "total_found": len(all_papers),
                 "unique_papers": len(unique_papers),
                 "final_count": len(final_papers),
                 "sources_searched": sources,
-                "search_query": search_query
+                "original_query": research_input,
+                "ai_intent_detection": {
+                    "arxiv_query": arxiv_query,
+                    "openalex_url_params": openalex_url_params,
+                    "research_domain": search_intent.get('research_domain', 'unknown'),
+                    "intent_confidence": search_intent.get('intent_confidence', 0),
+                    "primary_keywords": search_intent.get('primary_keywords', [])
+                },
+                "status_info": status_info
             }
             
             self.logger.info(f"Discovery completed: {len(final_papers)} papers returned")
@@ -1408,70 +1945,77 @@ def health_check():
 
 @app.route('/api/discover-papers', methods=['POST'])
 @firebase_auth_optional
-def discover_papers():
-    """Discover relevant academic papers based on research query"""
+def discover_papers_endpoint():
+    """API endpoint to discover relevant academic papers"""
     try:
+        # Get request data
         data = request.get_json()
-        
         if not data:
-            return jsonify({"success": False, "error": "No data provided"}), 400
+            return jsonify({"success": False, "error": "No JSON data provided"}), 400
         
-        research_query = data.get('query', '').strip()
-        if not research_query:
-            return jsonify({"success": False, "error": "Research query is required"}), 400
+        research_input = data.get('query', '').strip()
+        if not research_input:
+            return jsonify({"success": False, "error": "Query is required"}), 400
         
-        sources = data.get('sources', ['arxiv', 'semantic_scholar'])
-        max_results = min(data.get('max_results', config.DEFAULT_MAX_RESULTS), config.MAX_ALLOWED_RESULTS)
-        session_id = data.get('session_id')  # Optional session ID for caching
+        sources = data.get('sources', ["arxiv", "openalex"])
+        max_results = min(data.get('max_results', 10), config.MAX_ALLOWED_RESULTS)
         
-        # Get user ID from Firebase auth (if authenticated)
-        user_id = request.current_user['uid'] if request.current_user else None
-        user_email = request.current_user['email'] if request.current_user else None
+        logger.info(f"📝 Received discovery request: {research_input[:100]}...")
         
-        # Validate sources
-        valid_sources = ['arxiv', 'semantic_scholar', 'google_scholar']
-        sources = [s for s in sources if s in valid_sources]
-        
-        if not sources:
-            return jsonify({"success": False, "error": "No valid sources specified"}), 400
-        
-        # Check cache first
-        cached_result = cache_manager.get_cached_search_results(research_query, sources, max_results)
+        # 🔍 NEW: Check cache first before making API calls
+        cached_result = cache_manager.get_cached_search_results(research_input, sources, max_results)
         if cached_result:
-            print(cached_result)
-            cached_result["results"]["from_cache"] = True
-            cached_result["results"]["cache_timestamp"] = cached_result.get("timestamp")
-            logger.info(f"Returning cached results for query: {research_query[:50]}...")
-            return jsonify(cached_result["results"])
+            logger.info(f"✅ Returning cached results for query: {research_input[:50]}...")
+            cached_result["from_cache"] = True
+            # Still save to user history if authenticated
+            if hasattr(request, 'current_user') and request.current_user:
+                cache_manager.save_user_search_to_history(
+                    request.current_user['uid'],
+                    research_input,
+                    cached_result.get('final_count', 0),
+                    sources
+                )
+            return jsonify(cached_result)
         
-        # Discover papers if not in cache
-        result = discovery_engine.discover_papers(research_query, sources, max_results)
+        # Call the discovery engine method
+        result = discovery_engine.discover_papers(
+            research_input=research_input,
+            sources=sources,
+            max_results=max_results
+        )
         
-        # Cache the results and save to appropriate history
-        if result.get("success"):
-            cache_key_id = user_id or session_id  # Use user_id for authenticated, session_id for anonymous
-            cache_manager.cache_search_results(research_query, sources, max_results, result, cache_key_id)
-            
-            # Save to user-specific or session-specific history
-            results_count = len(result.get('papers', []))
-            if user_id:
-                # Save to user history (persistent - 90 days)
-                cache_manager.save_user_search_to_history(user_id, research_query, results_count, sources)
-                logger.info(f"📚 Saved search to user history for: {user_email}")
-            elif session_id:
-                # Save to session history (temporary - 30 minutes)
-                cache_manager.save_search_to_history(session_id, research_query, results_count, sources)
-                logger.info(f"💾 Saved search to session history")
-            
+        # 🔄 Cache the fresh results and mark as not from cache
+        if result.get('success'):
             result["from_cache"] = False
-            result["user_authenticated"] = user_id is not None
+            # Cache the results for future requests
+            try:
+                user_id = request.current_user['uid'] if hasattr(request, 'current_user') and request.current_user else None
+                cache_manager.cache_search_results(research_input, sources, max_results, result, user_id)
+                logger.info(f"✅ Cached search results for query: {research_input[:50]}...")
+            except Exception as e:
+                logger.warning(f"Failed to cache search results: {e}")
+        
+        # Save search to history if user is authenticated and we have results
+        if hasattr(request, 'current_user') and request.current_user and result.get('success'):
+            try:
+                cache_manager.save_user_search_to_history(
+                    request.current_user['uid'],
+                    research_input,
+                    result.get('final_count', 0),
+                    sources
+                )
+            except Exception as e:
+                logger.warning(f"Failed to save search history: {e}")
         
         return jsonify(result)
         
     except Exception as e:
-        logger.error(f"Paper discovery endpoint failed: {e}")
-        return jsonify({"success": False, "error": "Internal server error"}), 500
-
+        logger.error(f"Discovery endpoint failed: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "papers": []
+        }), 500
 
 @app.route('/api/upload-paper', methods=['POST'])
 def upload_paper():
@@ -1504,7 +2048,7 @@ def upload_paper():
             research_query = f"{research_focus['topic']} {' '.join(research_focus['keywords'][:5])}"
             
             # Get parameters from form data
-            sources = request.form.get('sources', 'arxiv,semantic_scholar').split(',')
+            sources = request.form.get('sources', 'arxiv,openalex').split(',')
             max_results = min(int(request.form.get('max_results', config.DEFAULT_MAX_RESULTS)), 
                             config.MAX_ALLOWED_RESULTS)
             
@@ -1645,6 +2189,40 @@ def get_cache_stats():
         logger.error(f"Error getting cache stats: {str(e)}")
         return jsonify({"success": False, "error": "Failed to get cache statistics"}), 500
 
+@app.route('/api/cache/test', methods=['GET'])
+def test_cache():
+    """Test Redis cache functionality"""
+    try:
+        # Test basic Redis operations
+        test_data = {"test": "data", "timestamp": datetime.now().isoformat()}
+        
+        # Test cache operations
+        cache_result = cache_manager.cache_search_results(
+            "test query", 
+            ["test"], 
+            5, 
+            test_data, 
+            "test_session"
+        )
+        
+        retrieve_result = cache_manager.get_cached_search_results("test query", ["test"], 5)
+        
+        return jsonify({
+            "success": True,
+            "redis_enabled": cache_manager.enabled,
+            "redis_client_available": cache_manager.redis_client is not None,
+            "cache_save_success": cache_result,
+            "cache_retrieve_success": retrieve_result is not None,
+            "retrieved_data": retrieve_result
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False, 
+            "error": str(e),
+            "redis_enabled": cache_manager.enabled,
+            "redis_client_available": cache_manager.redis_client is not None
+        })
+
 
 @app.route('/api/cache/clear', methods=['POST'])
 def clear_cache():
@@ -1730,8 +2308,9 @@ def debug_cache():
 
 
 @app.route('/api/cache/search-results', methods=['POST'])
+@firebase_auth_optional
 def get_cached_search_results():
-    """Get cached search results for a session"""
+    """Get cached search results for a session or user"""
     print("calling cached search results")
     try:
         data = request.get_json()
@@ -1741,30 +2320,29 @@ def get_cached_search_results():
         session_id = data.get('session_id')
         query = data.get('query')  # Optional: get specific query results
         
-        if not session_id:
-            return jsonify({"success": False, "error": "Session ID is required"}), 400
+        # Get user ID from Firebase auth (if authenticated)
+        user_id = request.current_user['uid'] if request.current_user else None
         
-        # Get all cached results for the session
+        # Use user_id for authenticated users, session_id for anonymous users
+        cache_key_id = user_id or session_id
+        
+        if not cache_key_id:
+            return jsonify({"success": False, "error": "Session ID or authentication required"}), 400
+        
+        print(f"🔍 DEBUG: Looking for cache with ID: {cache_key_id} (user_id: {user_id}, session_id: {session_id})")
+        
+        # Get all cached results for the user/session
         if query:
-            # Get specific query results
-            cached_result = cache_manager.get_cached_search_results(query, session_id)
-            print("getting cached results", cached_result)
-            if cached_result:
-                return jsonify({
-                    "success": True,
-                    "has_cache": True,
-                    "result": cached_result,
-                    "query": query
-                })
-            else:
-                return jsonify({
-                    "success": True,
-                    "has_cache": False,
-                    "message": "No cached results for this query"
-                })
+            # For specific query results, we'd need sources and max_results
+            # This is not currently implemented properly, so skip for now
+            return jsonify({
+                "success": True,
+                "has_cache": False,
+                "message": "Specific query lookup not implemented"
+            })
         else:
-            # Get the most recent search results for the session
-            recent_results = cache_manager.get_recent_search_results(session_id)
+            # Get the most recent search results for the user/session
+            recent_results = cache_manager.get_recent_search_results(cache_key_id)
             if recent_results:
                 return jsonify({
                     "success": True,
@@ -2105,6 +2683,60 @@ def repeat_user_search():
         return jsonify({"success": False, "error": "Failed to repeat search"}), 500
 
 
+# Session-based search history endpoints (for anonymous users)
+@app.route('/api/search-history', methods=['GET'])
+def get_session_search_history():
+    """Get session-based search history for anonymous users"""
+    try:
+        session_id = request.args.get('session_id')
+        limit = int(request.args.get('limit', 20))
+        
+        if not session_id:
+            return jsonify({"success": False, "error": "Session ID is required"}), 400
+        
+        # Get session search history
+        history = cache_manager.get_session_search_history(session_id, limit)
+        
+        return jsonify({
+            "success": True,
+            "history": history,
+            "count": len(history)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting session search history: {e}")
+        return jsonify({"success": False, "error": "Failed to get search history"}), 500
+
+
+@app.route('/api/search-history', methods=['DELETE'])
+def clear_session_search_history():
+    """Clear session-based search history for anonymous users"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No data provided"}), 400
+        
+        session_id = data.get('session_id')
+        
+        if not session_id:
+            return jsonify({"success": False, "error": "Session ID is required"}), 400
+        
+        # Clear session search history
+        success = cache_manager.clear_session_search_history(session_id)
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": "Session search history cleared successfully"
+            })
+        else:
+            return jsonify({"success": False, "error": "Failed to clear search history"}), 500
+            
+    except Exception as e:
+        logger.error(f"Error clearing session search history: {e}")
+        return jsonify({"success": False, "error": "Failed to clear search history"}), 500
+
+
 @app.route('/api/sources', methods=['GET'])
 def get_available_sources():
     """Get list of available paper sources"""
@@ -2116,9 +2748,9 @@ def get_available_sources():
             "available": arxiv is not None
         },
         {
-            "id": "semantic_scholar", 
-            "name": "Semantic Scholar", 
-            "description": "AI-powered research tool for academic papers",
+            "id": "openalex", 
+            "name": "OpenAlex", 
+            "description": "Open catalog of scholarly papers with comprehensive metadata",
             "available": True
         },
         {

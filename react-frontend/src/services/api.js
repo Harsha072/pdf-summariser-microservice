@@ -1,4 +1,7 @@
 // Academic Paper Discovery Engine API Client
+import { v4 as uuidv4 } from 'uuid';
+import { auth } from '../config/firebase';
+
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 // Session management
@@ -15,15 +18,74 @@ const getSessionId = () => {
 // Get Firebase auth headers
 const getAuthHeaders = () => {
   const token = localStorage.getItem('firebase_token');
+  console.log('🔑 Auth token status:', token ? 'Present' : 'Missing');
+  
   const headers = {
     'Content-Type': 'application/json',
   };
   
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+    console.log('🔐 Added Authorization header to request');
+    console.log('📋 Full headers object:', headers);
+  } else {
+    console.warn('⚠️ No Firebase token found in localStorage');
   }
   
   return headers;
+};
+
+// Function to handle API calls with automatic token refresh
+const authenticatedFetch = async (url, options = {}) => {
+  try {
+    // First attempt with current token
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        ...getAuthHeaders(),
+        ...(options.headers || {})
+      }
+    });
+
+    // If unauthorized and we have a refresh function available, try refreshing token
+    if (response.status === 401) {
+      console.log('🔄 Token expired, attempting refresh...');
+      
+      // Try to get fresh token from Firebase
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        try {
+          const newToken = await currentUser.getIdToken(true);
+          localStorage.setItem('firebase_token', newToken);
+          console.log('✅ Token refreshed successfully');
+          
+          // Retry the request with new token
+          const retryResponse = await fetch(url, {
+            ...options,
+            headers: {
+              ...getAuthHeaders(),
+              ...(options.headers || {})
+            }
+          });
+          
+          return retryResponse;
+        } catch (tokenError) {
+          console.error('❌ Token refresh failed:', tokenError);
+          // Clear invalid token
+          localStorage.removeItem('firebase_token');
+          throw new Error('Authentication failed. Please sign in again.');
+        }
+      } else {
+        console.warn('⚠️ No current user found for token refresh');
+        throw new Error('Please sign in to access this feature.');
+      }
+    }
+
+    return response;
+  } catch (error) {
+    console.error('🚨 API request failed:', error);
+    throw error;
+  }
 };
 
 // Create new session
@@ -91,9 +153,8 @@ export const getAvailableSources = async () => {
 
 // Download and analyze paper from URL
 export const downloadPaper = async (url) => {
-  const response = await fetch(`${API_BASE_URL}/api/download-paper`, {
+  const response = await authenticatedFetch(`${API_BASE_URL}/api/download-paper`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url })
   });
   return response.json();
@@ -106,9 +167,8 @@ export const getPaperDetails = async (paper) => {
     currentSessionId = await createSession();
   }
   
-  const response = await fetch(`${API_BASE_URL}/api/paper-details`, {
+  const response = await authenticatedFetch(`${API_BASE_URL}/api/paper-details`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ 
       paper,
       session_id: currentSessionId
@@ -203,7 +263,10 @@ export const clearCache = async (sessionOnly = false) => {
 export const getCachedSearchResults = async (query = null) => {
   try {
     const sessionId = getSessionId();
+    console.log('🔍 Getting cached results - Session ID:', sessionId);
+    
     if (!sessionId) {
+      console.log('⚠️ No session ID found');
       return { success: true, has_cache: false, message: 'No session ID' };
     }
 
@@ -211,13 +274,18 @@ export const getCachedSearchResults = async (query = null) => {
     if (query) {
       body.query = query;
     }
+    
+    console.log('📤 Sending cache request with body:', body);
 
     const response = await fetch(`${API_BASE_URL}/api/cache/search-results`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(body)
     });
-    return await response.json();
+    
+    const result = await response.json();
+    console.log('📥 Cache response:', result);
+    return result;
   } catch (error) {
     console.error('Failed to get cached search results:', error);
     return { success: false, error: error.message };
@@ -328,4 +396,52 @@ export default {
   clearLocalSession,
   // Firebase Authentication APIs
   authAPI
+};
+
+// Search History APIs
+export const getUserSearchHistory = async (limit = 20) => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/api/user/search-history?limit=${limit}`, {
+    method: 'GET'
+  });
+  return response.json();
+};
+
+export const getSessionSearchHistory = async (sessionId, limit = 20) => {
+  const response = await fetch(`${API_BASE_URL}/api/search-history?session_id=${sessionId}&limit=${limit}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+  
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+  
+  return response.json();
+};
+
+export const clearUserSearchHistory = async () => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/api/user/search-history`, {
+    method: 'DELETE'
+  });
+  return response.json();
+};
+
+export const clearSessionSearchHistory = async (sessionId) => {
+  const response = await fetch(`${API_BASE_URL}/api/search-history`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      session_id: sessionId
+    }),
+  });
+  
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+  
+  return response.json();
 };
