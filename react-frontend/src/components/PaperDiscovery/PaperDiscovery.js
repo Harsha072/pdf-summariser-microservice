@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { getCachedSearchResults, discoverPapers } from '../../services/api';
+import { getCachedSearchResults, discoverPapers, getCurrentSessionId } from '../../services/api';
 // import { AuthButton, ProtectedFeature } from '../Auth/InlineAuth'; // Currently unused
 import { SmartPaperActions } from './ProtectedPaperFeatures';
 import { useAuth } from '../../context/AuthContext';
@@ -14,14 +14,15 @@ const PaperDiscovery = () => {
   const [uploadedFile, setUploadedFile] = useState(null);
   const [discoveredPapers, setDiscoveredPapers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedSources, setSelectedSources] = useState(['arxiv', 'semantic_scholar']);
+  const [selectedSources, setSelectedSources] = useState(['arxiv', 'openalex']);
   const [maxResults, setMaxResults] = useState(10);
   const [error, setError] = useState('');
   const [cacheStatus, setCacheStatus] = useState('');
+  const [bookmarkStatus, setBookmarkStatus] = useState({}); // Track bookmark status for papers
 
   const availableSources = [
     { id: 'arxiv', name: 'arXiv', description: 'Open access repository of scientific papers' },
-    { id: 'semantic_scholar', name: 'Semantic Scholar', description: 'AI-powered research tool' },
+    { id: 'openalex', name: 'OpenAlex', description: 'Open catalog of scholarly papers with comprehensive metadata' },
     { id: 'google_scholar', name: 'Google Scholar', description: 'Web search for scholarly literature' }
   ];
 
@@ -75,7 +76,7 @@ const PaperDiscovery = () => {
             const mostRecent = cachedData.results[0];
             setSearchQuery(mostRecent.query || '');
             setDiscoveredPapers(mostRecent.results?.papers || []);
-            setSelectedSources(mostRecent.sources || ['arxiv', 'semantic_scholar']);
+            setSelectedSources(mostRecent.sources || ['arxiv', 'openalex']);
             setMaxResults(mostRecent.max_results || 10);
             setCacheStatus(`Loaded cached results from ${new Date(mostRecent.timestamp).toLocaleTimeString()}`);
           } else if (cachedData.result) {
@@ -198,6 +199,53 @@ const PaperDiscovery = () => {
       }
     } catch (err) {
       setError('Failed to download paper');
+    }
+  };
+
+  // 📑 BOOKMARK FUNCTIONS
+  const toggleBookmark = async (paper) => {
+    try {
+      const paperId = paper.paper_id;
+      const isCurrentlyBookmarked = bookmarkStatus[paperId] || paper.is_bookmarked;
+      
+      const endpoint = isCurrentlyBookmarked ? '/api/bookmarks/remove' : '/api/bookmarks/save';
+      const payload = isCurrentlyBookmarked 
+        ? { paper_id: paperId }
+        : { paper: paper };
+
+      const response = await fetch(`http://localhost:5000${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-ID': getCurrentSessionId(),
+          ...(user && { 'Authorization': `Bearer ${await user.getIdToken()}` })
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        // Update bookmark status locally
+        setBookmarkStatus(prev => ({
+          ...prev,
+          [paperId]: !isCurrentlyBookmarked
+        }));
+        
+        // Update the paper's bookmark status in the discoveredPapers array
+        setDiscoveredPapers(prev => 
+          prev.map(p => 
+            p.paper_id === paperId 
+              ? { ...p, is_bookmarked: !isCurrentlyBookmarked }
+              : p
+          )
+        );
+      } else {
+        setError(data.error || 'Failed to toggle bookmark');
+      }
+    } catch (err) {
+      console.error('Error toggling bookmark:', err);
+      setError('Failed to toggle bookmark');
     }
   };
 
@@ -392,13 +440,34 @@ const PaperDiscovery = () => {
               <div key={paper.id || index} className="paper-card">
                 <div className="paper-header">
                   <h4 className="paper-title">{paper.title}</h4>
-                  <div className="paper-meta">
-                    <span className="paper-source">{paper.source}</span>
-                    {paper.relevance_score && (
-                      <span className="relevance-score">
-                        Relevance: {Math.round(paper.relevance_score)}%
-                      </span>
-                    )}
+                  <div className="paper-header-actions">
+                    <div className="paper-meta">
+                      <span className="paper-source">{paper.source}</span>
+                      {paper.relevance_score && (
+                        <span className="relevance-score">
+                          Relevance: {Math.round(paper.relevance_score)}%
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => toggleBookmark(paper)}
+                      className={`bookmark-btn ${
+                        bookmarkStatus[paper.paper_id] || paper.is_bookmarked 
+                          ? 'bookmarked' 
+                          : 'not-bookmarked'
+                      }`}
+                      title={
+                        bookmarkStatus[paper.paper_id] || paper.is_bookmarked 
+                          ? 'Remove from bookmarks' 
+                          : 'Add to bookmarks'
+                      }
+                    >
+                      <i className={`fas fa-bookmark ${
+                        bookmarkStatus[paper.paper_id] || paper.is_bookmarked 
+                          ? '' 
+                          : 'far'
+                      }`}></i>
+                    </button>
                   </div>
                 </div>
 

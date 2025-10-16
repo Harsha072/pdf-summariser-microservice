@@ -28,6 +28,10 @@ import fitz  # PyMuPDF
 # Text similarity and processing
 from fuzzywuzzy import fuzz
 
+# RAG Components
+from vector_database import VectorDatabase
+from rag_pipeline import RAGPipelineManager
+
 # Import configuration
 from config import (
     config, 
@@ -812,9 +816,144 @@ class RedisCacheManager:
             self.logger.error(f"Failed to clear session search history: {e}")
             return False
 
+    # 📑 BOOKMARK FUNCTIONALITY
+    def save_paper_bookmark(self, user_id: str, paper: Dict[str, Any], session_id: str = None) -> bool:
+        """Save a paper to user's bookmarks"""
+        if not self.enabled:
+            return False
+        
+        try:
+            # Generate unique paper ID using consistent method
+            paper_id = generate_paper_id(paper)
+            
+            # Choose bookmark key based on authentication
+            if user_id:
+                bookmark_key = f"bookmarks:user:{user_id}"
+            elif session_id:
+                bookmark_key = f"bookmarks:session:{session_id}"
+            else:
+                return False
+            
+            # Save paper details for retrieval
+            paper_details_key = f"paper_details:{paper_id}"
+            paper_data = {
+                **paper,
+                'bookmarked_at': datetime.now().isoformat(),
+                'paper_id': paper_id
+            }
+            
+            # Add to bookmark set and save paper details
+            self.redis_client.sadd(bookmark_key, paper_id)
+            self.redis_client.setex(paper_details_key, 2592000, self._serialize_data(paper_data))  # 30 days
+            
+            # Set bookmark collection expiry
+            self.redis_client.expire(bookmark_key, 2592000)  # 30 days
+            
+            self.logger.info(f"Bookmarked paper: {paper.get('title', 'Unknown')[:50]}...")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to save bookmark: {e}")
+            return False
+    
+    def remove_paper_bookmark(self, user_id: str, paper_id: str, session_id: str = None) -> bool:
+        """Remove a paper from user's bookmarks"""
+        if not self.enabled:
+            return False
+        
+        try:
+            # Choose bookmark key based on authentication
+            if user_id:
+                bookmark_key = f"bookmarks:user:{user_id}"
+            elif session_id:
+                bookmark_key = f"bookmarks:session:{session_id}"
+            else:
+                return False
+            
+            # Remove from bookmark set
+            result = self.redis_client.srem(bookmark_key, paper_id)
+            self.logger.info(f"Removed bookmark: {paper_id}")
+            return result > 0
+            
+        except Exception as e:
+            self.logger.error(f"Failed to remove bookmark: {e}")
+            return False
+    
+    def get_user_bookmarks(self, user_id: str, session_id: str = None) -> List[Dict[str, Any]]:
+        """Get all bookmarked papers for a user"""
+        if not self.enabled:
+            return []
+        
+        try:
+            # Choose bookmark key based on authentication
+            if user_id:
+                bookmark_key = f"bookmarks:user:{user_id}"
+            elif session_id:
+                bookmark_key = f"bookmarks:session:{session_id}"
+            else:
+                return []
+            
+            # Get all paper IDs in bookmark set
+            paper_ids = self.redis_client.smembers(bookmark_key)
+            bookmarks = []
+            
+            for paper_id in paper_ids:
+                paper_details_key = f"paper_details:{paper_id.decode() if isinstance(paper_id, bytes) else paper_id}"
+                cached_paper = self.redis_client.get(paper_details_key)
+                
+                if cached_paper:
+                    paper_data = self._deserialize_data(cached_paper)
+                    bookmarks.append(paper_data)
+            
+            # Sort by bookmark date (newest first)
+            bookmarks.sort(key=lambda x: x.get('bookmarked_at', ''), reverse=True)
+            self.logger.info(f"Retrieved {len(bookmarks)} bookmarks")
+            return bookmarks
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get bookmarks: {e}")
+            return []
+    
+    def is_paper_bookmarked(self, user_id: str, paper_id: str, session_id: str = None) -> bool:
+        """Check if a paper is bookmarked by user"""
+        if not self.enabled:
+            return False
+        
+        try:
+            # Choose bookmark key based on authentication
+            if user_id:
+                bookmark_key = f"bookmarks:user:{user_id}"
+            elif session_id:
+                bookmark_key = f"bookmarks:session:{session_id}"
+            else:
+                return False
+            
+            return self.redis_client.sismember(bookmark_key, paper_id)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to check bookmark status: {e}")
+            return False
+
 
 # Initialize cache manager
 cache_manager = RedisCacheManager(redis_client)
+
+# 📑 BOOKMARK UTILITY FUNCTIONS
+def generate_paper_id(paper: Dict[str, Any]) -> str:
+    """Generate a consistent unique ID for a paper"""
+    # Use URL as primary identifier, fallback to title+authors
+    if paper.get('url'):
+        return hashlib.md5(paper['url'].encode()).hexdigest()[:12]
+    elif paper.get('id'):
+        return hashlib.md5(str(paper['id']).encode()).hexdigest()[:12]
+    else:
+        # Create ID from title and first author
+        title = paper.get('title', 'unknown')[:100]
+        authors = paper.get('authors', [])
+        first_author = authors[0] if isinstance(authors, list) and authors else 'unknown'
+        
+        id_string = f"{title}_{first_author}".replace(' ', '_').replace(':', '_')
+        return hashlib.md5(id_string.encode()).hexdigest()[:12]
 
 
 class ResearchFocusExtractor:
@@ -1649,7 +1788,7 @@ class AcademicPaperDiscoveryEngine:
         self.logger = logger
         self.openai_client = openai_client  # Store OpenAI client as instance variable
         
-        # Initialize components
+        # Initialize traditional components
         self.research_extractor = ResearchFocusExtractor(openai_client)
         self.arxiv_searcher = ArxivSearcher()
         self.openalex_searcher = OpenAlexSearcher()  # 🚀 NEW: OpenAlex instead of Semantic Scholar
@@ -1658,7 +1797,11 @@ class AcademicPaperDiscoveryEngine:
         self.duplicate_remover = DuplicateRemover(config.DUPLICATE_THRESHOLD)
         self.pdf_analyzer = PDFAnalyzer(self.research_extractor)
         
-        self.logger.info("Academic Paper Discovery Engine initialized")
+        # 🧠 RAG Components
+        self.vector_db = VectorDatabase()
+        self.rag_pipeline = RAGPipelineManager(openai_client, self.vector_db)
+        
+        self.logger.info("Academic Paper Discovery Engine initialized with RAG capabilities")
     
     def extract_search_intent(self, research_input: str) -> Dict[str, Any]:
         """Extract search intent and optimize queries for different academic databases"""
@@ -1921,6 +2064,71 @@ class AcademicPaperDiscoveryEngine:
                 "papers": []
             }
     
+    def discover_papers_with_rag(self, research_input: str, sources: List[str] = None, 
+                               max_results: int = 10, user_context: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Enhanced paper discovery with RAG-powered recommendations"""
+        try:
+            self.logger.info(f"🧠 Starting RAG-enhanced discovery for: {research_input[:50]}...")
+            
+            # Step 1: Perform traditional search to gather papers
+            traditional_results = self.discover_papers(research_input, sources, max_results * 2)
+            
+            if not traditional_results.get('success'):
+                self.logger.warning("Traditional search failed, returning error")
+                return traditional_results
+            
+            papers = traditional_results.get('papers', [])
+            if not papers:
+                self.logger.warning("No papers found from traditional search")
+                return traditional_results
+            
+            self.logger.info(f"Traditional search found {len(papers)} papers")
+            
+            # Step 2: Index papers in vector database for semantic search
+            indexed_count = self.vector_db.add_papers(papers)
+            self.logger.info(f"Indexed {indexed_count} papers in vector database")
+            
+            # Step 3: Get RAG-enhanced recommendations
+            rag_results = self.rag_pipeline.get_rag_recommendations(
+                user_query=research_input,
+                user_context=user_context,
+                max_papers=max_results
+            )
+            
+            if rag_results.get('success'):
+                # Combine traditional results with RAG enhancements
+                enhanced_result = {
+                    **traditional_results,
+                    'papers': rag_results['recommendations'],
+                    'rag_insights': rag_results['rag_insights'],
+                    'research_recommendations': rag_results['research_recommendations'],
+                    'search_method': 'rag_enhanced',
+                    'enhancement_stats': {
+                        'vector_db_stats': self.vector_db.get_stats(),
+                        'retrieval_stats': rag_results.get('retrieval_stats', {}),
+                        'traditional_papers_count': len(papers),
+                        'final_recommendations_count': len(rag_results['recommendations'])
+                    }
+                }
+                
+                self.logger.info(f"✅ RAG enhancement completed successfully")
+                return enhanced_result
+                
+            else:
+                # Fallback to traditional results if RAG fails
+                self.logger.warning(f"RAG enhancement failed: {rag_results.get('error')}")
+                traditional_results['search_method'] = 'traditional_fallback'
+                traditional_results['rag_error'] = rag_results.get('error')
+                return traditional_results
+                
+        except Exception as e:
+            self.logger.error(f"RAG-enhanced discovery failed: {e}")
+            # Fallback to traditional discovery
+            fallback_result = self.discover_papers(research_input, sources, max_results)
+            fallback_result['search_method'] = 'traditional_fallback'
+            fallback_result['rag_error'] = str(e)
+            return fallback_result
+    
     def analyze_uploaded_paper(self, pdf_path: str) -> Dict[str, Any]:
         """Analyze uploaded paper and find similar research"""
         return self.pdf_analyzer.analyze_research_paper(pdf_path)
@@ -1967,6 +2175,18 @@ def discover_papers_endpoint():
         if cached_result:
             logger.info(f"✅ Returning cached results for query: {research_input[:50]}...")
             cached_result["from_cache"] = True
+            
+            # 📑 Add bookmark status to cached papers
+            user_id = request.current_user['uid'] if hasattr(request, 'current_user') and request.current_user else None
+            session_id = request.headers.get('X-Session-ID')
+            
+            if cached_result.get('papers') and (user_id or session_id):
+                for paper in cached_result['papers']:
+                    # Generate paper ID for bookmark checking
+                    paper_id = generate_paper_id(paper)
+                    paper['paper_id'] = paper_id
+                    paper['is_bookmarked'] = cache_manager.is_paper_bookmarked(user_id, paper_id, session_id)
+            
             # Still save to user history if authenticated
             if hasattr(request, 'current_user') and request.current_user:
                 cache_manager.save_user_search_to_history(
@@ -1987,9 +2207,20 @@ def discover_papers_endpoint():
         # 🔄 Cache the fresh results and mark as not from cache
         if result.get('success'):
             result["from_cache"] = False
+            
+            # 📑 Add bookmark status to each paper
+            user_id = request.current_user['uid'] if hasattr(request, 'current_user') and request.current_user else None
+            session_id = request.headers.get('X-Session-ID')
+            
+            if result.get('papers') and (user_id or session_id):
+                for paper in result['papers']:
+                    # Generate paper ID for bookmark checking
+                    paper_id = generate_paper_id(paper)
+                    paper['paper_id'] = paper_id
+                    paper['is_bookmarked'] = cache_manager.is_paper_bookmarked(user_id, paper_id, session_id)
+            
             # Cache the results for future requests
             try:
-                user_id = request.current_user['uid'] if hasattr(request, 'current_user') and request.current_user else None
                 cache_manager.cache_search_results(research_input, sources, max_results, result, user_id)
                 logger.info(f"✅ Cached search results for query: {research_input[:50]}...")
             except Exception as e:
@@ -2016,6 +2247,106 @@ def discover_papers_endpoint():
             "error": str(e),
             "papers": []
         }), 500
+
+
+@app.route('/api/discover-papers-rag', methods=['POST'])
+@firebase_auth_optional
+def discover_papers_rag_endpoint():
+    """🧠 RAG-enhanced paper discovery endpoint with personalized recommendations"""
+    try:
+        # Get request data
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No JSON data provided"}), 400
+        
+        research_input = data.get('query', '').strip()
+        if not research_input:
+            return jsonify({"success": False, "error": "Query is required"}), 400
+        
+        sources = data.get('sources', ["arxiv", "openalex"])
+        max_results = min(data.get('max_results', 10), config.MAX_ALLOWED_RESULTS)
+        
+        # Extract user context for personalization
+        user_context = {
+            'level': data.get('research_level', 'graduate'),
+            'field': data.get('field_of_study', 'Computer Science'),
+            'interests': data.get('research_interests', []),
+            'recent_queries': data.get('recent_queries', [])
+        }
+        
+        logger.info(f"🧠 RAG-enhanced discovery request: {research_input[:100]}...")
+        
+        # 🔍 Check cache first (same as traditional endpoint)
+        cached_result = cache_manager.get_cached_search_results(research_input, sources, max_results)
+        if cached_result and not data.get('force_refresh', False):
+            logger.info(f"✅ Returning cached results for RAG query: {research_input[:50]}...")
+            cached_result["from_cache"] = True
+            cached_result["search_method"] = "cached_rag"
+            
+            # Add bookmark status to cached results
+            user_id = request.current_user['uid'] if hasattr(request, 'current_user') and request.current_user else None
+            session_id = request.headers.get('X-Session-ID')
+            
+            if cached_result.get('papers') and (user_id or session_id):
+                for paper in cached_result['papers']:
+                    paper_id = generate_paper_id(paper)
+                    paper['paper_id'] = paper_id
+                    paper['is_bookmarked'] = cache_manager.is_paper_bookmarked(user_id, paper_id, session_id)
+            
+            return jsonify(cached_result)
+        
+        # Call RAG-enhanced discovery engine
+        result = discovery_engine.discover_papers_with_rag(
+            research_input=research_input,
+            sources=sources,
+            max_results=max_results,
+            user_context=user_context
+        )
+        
+        # 🔄 Cache and enhance results
+        if result.get('success'):
+            result["from_cache"] = False
+            
+            # 📑 Add bookmark status to each paper
+            user_id = request.current_user['uid'] if hasattr(request, 'current_user') and request.current_user else None
+            session_id = request.headers.get('X-Session-ID')
+            
+            if result.get('papers') and (user_id or session_id):
+                for paper in result['papers']:
+                    paper_id = generate_paper_id(paper)
+                    paper['paper_id'] = paper_id
+                    paper['is_bookmarked'] = cache_manager.is_paper_bookmarked(user_id, paper_id, session_id)
+            
+            # Cache the RAG results for future requests
+            try:
+                cache_manager.cache_search_results(research_input, sources, max_results, result, user_id)
+                logger.info(f"✅ Cached RAG search results for query: {research_input[:50]}...")
+            except Exception as e:
+                logger.warning(f"Failed to cache RAG search results: {e}")
+        
+        # Save search to history if user is authenticated
+        if hasattr(request, 'current_user') and request.current_user and result.get('success'):
+            try:
+                cache_manager.save_user_search_to_history(
+                    request.current_user['uid'],
+                    research_input,
+                    len(result.get('papers', [])),
+                    sources
+                )
+            except Exception as e:
+                logger.warning(f"Failed to save RAG search history: {e}")
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"RAG discovery endpoint failed: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "papers": [],
+            "search_method": "rag_error"
+        }), 500
+
 
 @app.route('/api/upload-paper', methods=['POST'])
 def upload_paper():
@@ -2781,16 +3112,208 @@ def file_too_large(error):
     return jsonify({"success": False, "error": "File too large"}), 413
 
 
+# 📑 BOOKMARK API ENDPOINTS
+
+@app.route('/api/bookmarks/save', methods=['POST'])
+@firebase_auth_optional
+def save_bookmark():
+    """Save a paper to bookmarks"""
+    try:
+        data = request.get_json()
+        if not data or not data.get('paper'):
+            return jsonify({"success": False, "error": "Paper data is required"}), 400
+        
+        paper = data['paper']
+        user_id = request.current_user['uid'] if hasattr(request, 'current_user') and request.current_user else None
+        session_id = data.get('session_id') or request.headers.get('X-Session-ID')
+        
+        if not user_id and not session_id:
+            return jsonify({"success": False, "error": "User authentication or session ID required"}), 401
+        
+        success = cache_manager.save_paper_bookmark(user_id, paper, session_id)
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": "Paper bookmarked successfully",
+                "paper_id": paper.get('url') or paper.get('id') or paper.get('title', '')[:100]
+            })
+        else:
+            return jsonify({"success": False, "error": "Failed to save bookmark"}), 500
+            
+    except Exception as e:
+        logger.error(f"Bookmark save failed: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/bookmarks/remove', methods=['POST'])
+@firebase_auth_optional
+def remove_bookmark():
+    """Remove a paper from bookmarks"""
+    try:
+        data = request.get_json()
+        if not data or not data.get('paper_id'):
+            return jsonify({"success": False, "error": "Paper ID is required"}), 400
+        
+        paper_id = data['paper_id']
+        user_id = request.current_user['uid'] if hasattr(request, 'current_user') and request.current_user else None
+        session_id = data.get('session_id') or request.headers.get('X-Session-ID')
+        
+        if not user_id and not session_id:
+            return jsonify({"success": False, "error": "User authentication or session ID required"}), 401
+        
+        success = cache_manager.remove_paper_bookmark(user_id, paper_id, session_id)
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": "Bookmark removed successfully"
+            })
+        else:
+            return jsonify({"success": False, "error": "Bookmark not found or failed to remove"}), 404
+            
+    except Exception as e:
+        logger.error(f"Bookmark removal failed: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/bookmarks', methods=['GET'])
+@firebase_auth_optional
+def get_bookmarks():
+    """Get all bookmarked papers for the current user"""
+    try:
+        user_id = request.current_user['uid'] if hasattr(request, 'current_user') and request.current_user else None
+        session_id = request.args.get('session_id') or request.headers.get('X-Session-ID')
+        
+        if not user_id and not session_id:
+            return jsonify({"success": False, "error": "User authentication or session ID required"}), 401
+        
+        bookmarks = cache_manager.get_user_bookmarks(user_id, session_id)
+        
+        return jsonify({
+            "success": True,
+            "bookmarks": bookmarks,
+            "count": len(bookmarks),
+            "user_authenticated": user_id is not None
+        })
+        
+    except Exception as e:
+        logger.error(f"Get bookmarks failed: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/bookmarks/check', methods=['POST'])
+@firebase_auth_optional
+def check_bookmark_status():
+    """Check if papers are bookmarked (bulk check)"""
+    try:
+        data = request.get_json()
+        if not data or not data.get('paper_ids'):
+            return jsonify({"success": False, "error": "Paper IDs are required"}), 400
+        
+        paper_ids = data['paper_ids']
+        user_id = request.current_user['uid'] if hasattr(request, 'current_user') and request.current_user else None
+        session_id = data.get('session_id') or request.headers.get('X-Session-ID')
+        
+        if not user_id and not session_id:
+            return jsonify({"success": False, "error": "User authentication or session ID required"}), 401
+        
+        bookmark_status = {}
+        for paper_id in paper_ids:
+            bookmark_status[paper_id] = cache_manager.is_paper_bookmarked(user_id, paper_id, session_id)
+        
+        return jsonify({
+            "success": True,
+            "bookmark_status": bookmark_status
+        })
+        
+    except Exception as e:
+        logger.error(f"Bookmark status check failed: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# 🧠 VECTOR DATABASE API ENDPOINTS
+
+@app.route('/api/vector-db/stats', methods=['GET'])
+def vector_database_stats():
+    """Get vector database statistics and persistence info"""
+    try:
+        # Get database stats from discovery engine
+        vector_stats = discovery_engine.vector_db.get_database_stats()
+        storage_info = discovery_engine.vector_db.get_persistent_storage_size()
+        
+        return jsonify({
+            "success": True,
+            "database_stats": vector_stats,
+            "storage_info": storage_info,
+            "persistence_enabled": True
+        })
+        
+    except Exception as e:
+        logger.error(f"Failed to get vector database stats: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/vector-db/manual-save', methods=['POST'])
+def manual_save_vector_db():
+    """Manually trigger vector database save to disk"""
+    try:
+        discovery_engine.vector_db.manual_save()
+        
+        return jsonify({
+            "success": True,
+            "message": "Vector database saved to disk successfully"
+        })
+        
+    except Exception as e:
+        logger.error(f"Failed to manually save vector database: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/vector-db/clear', methods=['POST'])
+def clear_vector_database():
+    """Clear vector database (both memory and persistent storage)"""
+    try:
+        discovery_engine.vector_db.clear_database()
+        
+        return jsonify({
+            "success": True,
+            "message": "Vector database cleared successfully"
+        })
+        
+    except Exception as e:
+        logger.error(f"Failed to clear vector database: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
 if __name__ == '__main__':
     logger.info("🔬 Academic Paper Discovery Engine Starting...")
-    logger.info("=" * 60)
+    logger.info("=" * 70)
     logger.info("Available endpoints:")
-    logger.info("- POST /api/discover-papers - Discover papers by research query")
+    logger.info("📄 PAPER DISCOVERY:")
+    logger.info("- POST /api/discover-papers - Traditional paper discovery")
+    logger.info("- POST /api/discover-papers-rag - 🧠 RAG-enhanced discovery")
     logger.info("- POST /api/upload-paper - Upload paper to find similar research")
     logger.info("- POST /api/download-paper - Download and analyze paper from URL")
+    logger.info("")
+    logger.info("🧠 VECTOR DATABASE:")
+    logger.info("- GET /api/vector-db/stats - Database statistics & persistence info")
+    logger.info("- POST /api/vector-db/manual-save - Manually save to disk")
+    logger.info("- POST /api/vector-db/clear - Clear database & storage")
+    logger.info("")
+    logger.info("⚙️  SYSTEM:")
     logger.info("- GET /api/health - Health check")
     logger.info("- GET /api/sources - Available search sources")
-    logger.info("=" * 60)
+    logger.info("=" * 70)
     logger.info("🚀 Starting Flask development server...")
     
     app.run(debug=True, host='0.0.0.0', port=5000)
