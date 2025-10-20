@@ -278,8 +278,15 @@ const PaperDetails = () => {
 
         {/* Paper Actions */}
         <div className="paper-actions-section">
-          <h2>🔗 Access Paper</h2>
+          <h2>🔗 Access & Explore</h2>
           <div className="action-buttons">
+            <button
+              onClick={() => navigate(`/paper-relationships?paperId=${encodeURIComponent(paper.id || paper.url || paperId)}`)}
+              className="action-button relationships"
+            >
+              🔗 Explore Paper Relationships
+            </button>
+            
             {paper.url && (
               <a
                 href={paper.url}

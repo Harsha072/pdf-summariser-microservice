@@ -226,19 +226,11 @@ class OpenAIConfig:
 
 
 class ExternalLibrariesConfig:
-    """Configuration for external libraries availability"""
+    """Configuration for checking external library availability"""
     
     def __init__(self):
-        self.arxiv_available = self._check_arxiv()
-    
-    def _check_arxiv(self) -> bool:
-        """Check if arXiv library is available"""
-        try:
-            import arxiv
-            return True
-        except ImportError:
-            logger.warning("⚠️ arXiv library not available. Install with: pip install arxiv")
-            return False
+        # Removed arXiv - using only OpenAlex
+        pass
 
 
 # Initialize all configurations
@@ -264,5 +256,5 @@ logger.info(f"📁 Temp Directory: {config.TEMP_DIR}")
 logger.info(f"🤖 OpenAI Available: {openai_config.is_available()}")
 logger.info(f"🔥 Firebase Available: {firebase_config.is_available()}")
 logger.info(f"📊 Redis Available: {redis_config.is_available()}")
-logger.info(f"📚 arXiv Available: {external_libs.arxiv_available}")
+# Removed arXiv logging - using only OpenAlex
 logger.info("=" * 60)

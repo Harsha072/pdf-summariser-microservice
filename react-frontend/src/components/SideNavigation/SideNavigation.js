@@ -19,7 +19,14 @@ const SideNavigation = () => {
           badge: null
         },
         {
-          icon: "📋",
+          icon: "🔗",
+          label: "Paper Relationships",
+          path: "/paper-relationships",
+          description: "Explore paper family trees",
+          badge: "SIMPLE"
+        },
+        {
+          icon: "�📋",
           label: "Search History",
           path: "/history",
           description: "Recent searches",

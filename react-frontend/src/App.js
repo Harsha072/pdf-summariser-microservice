@@ -9,6 +9,7 @@ import SearchHistoryPage from './pages/SearchHistory';
 import SavedPapers from './pages/SavedPapers';
 import HelpGuide from './pages/HelpGuide';
 import UserProfile from './pages/UserProfile';
+import SimplePaperRelationshipsPage from './pages/SimplePaperRelationshipsPage';
 import Notification from './components/Notification/Notification';
 import { NotificationProvider } from './context/NotificationContext';
 import { AuthProvider } from './context/AuthContext';
@@ -82,6 +83,7 @@ function App() {
               <Routes>
                 <Route path="/" element={<PaperDiscovery />} />
                 <Route path="/paper-details/:paperId" element={<PaperDetails />} />
+                <Route path="/paper-relationships" element={<SimplePaperRelationshipsPage />} />
                 <Route path="/history" element={<SearchHistoryPage />} />
                 <Route path="/saved" element={<SavedPapers />} />
                 <Route path="/help" element={<HelpGuide />} />

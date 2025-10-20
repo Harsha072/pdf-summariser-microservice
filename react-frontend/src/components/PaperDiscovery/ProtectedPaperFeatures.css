@@ -40,6 +40,16 @@
   transform: translateY(-1px);
 }
 
+.action-button.graph {
+  background-color: #dc2626;
+  color: white;
+}
+
+.action-button.graph:hover {
+  background-color: #b91c1c;
+  transform: translateY(-1px);
+}
+
 .action-button.external {
   background-color: #6b7280;
   color: white;

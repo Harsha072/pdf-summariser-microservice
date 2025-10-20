@@ -10,7 +10,9 @@ const ProtectedPaperActions = ({
   paper, 
   index, 
   onViewDetails, 
-  onDownloadPaper 
+  onDownloadPaper,
+  onBuildGraph,
+  isBuildingGraph = false
 }) => {
   const { isAuthenticated } = useAuth();
 
@@ -72,6 +74,25 @@ const ProtectedPaperActions = ({
         </ProtectedFeature>
       )}
 
+      {/* Build Graph - Always Available */}
+      {(paper.paper_id || paper.id) ? (
+        <button 
+          onClick={() => onBuildGraph && onBuildGraph(paper)}
+          className="action-button graph"
+          title="Build network analysis graph for this paper"
+        >
+          📊 Build Graph
+        </button>
+      ) : (
+        <button 
+          className="action-button graph disabled"
+          title="Graph building not available for this paper (missing paper ID)"
+          disabled
+        >
+          📊 Build Graph (N/A)
+        </button>
+      )}
+
       {/* Open Online - Always Available */}
       {paper.url && (
         <button 
@@ -122,7 +143,9 @@ export const SmartPaperActions = ({
   paper, 
   index, 
   onViewDetails, 
-  onDownloadPaper 
+  onDownloadPaper,
+  onBuildGraph,
+  isBuildingGraph = false
 }) => {
   const { isAuthenticated } = useAuth();
 
@@ -144,6 +167,26 @@ export const SmartPaperActions = ({
         
         {/* Show available actions */}
         <div className="available-actions">
+          {/* Build Graph - Always Available */}
+          {(paper.paper_id || paper.id) ? (
+            <button 
+              onClick={() => onBuildGraph && onBuildGraph(paper)}
+              className="action-button graph"
+              title="Build network analysis graph for this paper"
+              disabled={isBuildingGraph}
+            >
+              {isBuildingGraph ? '🔄 Building...' : '📊 Build Graph'}
+            </button>
+          ) : (
+            <button 
+              className="action-button graph disabled"
+              title="Graph building not available for this paper (missing paper ID)"
+              disabled
+            >
+              📊 Build Graph (N/A)
+            </button>
+          )}
+          
           {paper.url && (
             <button 
               onClick={() => window.open(paper.url, '_blank')}
@@ -174,6 +217,27 @@ export const SmartPaperActions = ({
           📄 Download PDF
         </button>
       )}
+      
+      {/* Build Graph - Always Available */}
+      {(paper.paper_id || paper.id) ? (
+        <button 
+          onClick={() => onBuildGraph && onBuildGraph(paper)}
+          className="action-button graph"
+          title="Build network analysis graph for this paper"
+          disabled={isBuildingGraph}
+        >
+          {isBuildingGraph ? '� Building...' : '�📊 Build Graph'}
+        </button>
+      ) : (
+        <button 
+          className="action-button graph disabled"
+          title="Graph building not available for this paper (missing paper ID)"
+          disabled
+        >
+          📊 Build Graph (N/A)
+        </button>
+      )}
+      
       {paper.url && (
         <button 
           onClick={() => window.open(paper.url, '_blank')}

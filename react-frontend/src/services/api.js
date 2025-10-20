@@ -109,7 +109,7 @@ export const createSession = async () => {
 };
 
 // Export individual API functions for the Academic Paper Discovery Engine
-export const discoverPapers = async (query, sources = ['arxiv', 'semantic_scholar'], maxResults = 10) => {
+export const discoverPapers = async (query, sources = ['openalex'], maxResults = 10) => {
   let currentSessionId = getSessionId();
   if (!currentSessionId) {
     currentSessionId = await createSession();
@@ -128,7 +128,7 @@ export const discoverPapers = async (query, sources = ['arxiv', 'semantic_schola
   return response.json();
 };
 
-export const uploadPaper = async (file, sources = ['arxiv', 'semantic_scholar'], maxResults = 10) => {
+export const uploadPaper = async (file, sources = ['openalex'], maxResults = 10) => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('sources', sources.join(','));
@@ -187,7 +187,7 @@ const handleApiResponse = async (response) => {
 };
 
 // Enhanced API functions with better error handling
-export const discoverPapersWithErrorHandling = async (query, sources = ['arxiv', 'semantic_scholar'], maxResults = 10) => {
+export const discoverPapersWithErrorHandling = async (query, sources = ['openalex'], maxResults = 10) => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/discover-papers`, {
       method: 'POST',
@@ -201,7 +201,7 @@ export const discoverPapersWithErrorHandling = async (query, sources = ['arxiv',
   }
 };
 
-export const uploadPaperWithErrorHandling = async (file, sources = ['arxiv', 'semantic_scholar'], maxResults = 10) => {
+export const uploadPaperWithErrorHandling = async (file, sources = ['openalex'], maxResults = 10) => {
   try {
     const formData = new FormData();
     formData.append('file', file);

@@ -32,6 +32,10 @@ from fuzzywuzzy import fuzz
 from vector_database import VectorDatabase
 from rag_pipeline import RAGPipelineManager
 
+# Simple Paper Relationships Component
+from simple_paper_relationships import SimplePaperRelationships
+from citation_data_extractor import CitationDataExtractor
+
 # Import configuration
 from config import (
     config, 
@@ -44,10 +48,7 @@ from config import (
     external_libs
 )
 
-# ArXiv API import
-arxiv = None
-if external_libs.arxiv_available:
-    import arxiv
+# Removed arXiv API import - using OpenAlex only
 
 # Get logger from config
 logger = logging.getLogger(__name__)
@@ -1071,92 +1072,6 @@ class ResearchFocusExtractor:
         return "Academic Research Topic"
 
 
-class ArxivSearcher:
-    """Search arXiv for academic papers"""
-    
-    def __init__(self):
-        self.logger = logger
-    
-    def search(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
-        """Search arXiv for papers with improved query handling"""
-        if not arxiv:
-            self.logger.warning("arXiv library not available")
-            return []
-        
-        try:
-            # Clean and optimize query for arXiv
-            cleaned_query = self._optimize_arxiv_query(query)
-            
-            search = arxiv.Search(
-                query=cleaned_query,
-                max_results=max_results,
-                sort_by=arxiv.SortCriterion.Relevance
-            )
-            
-            # Use client with better error handling
-            client = arxiv.Client(
-                page_size=10,  # Smaller page size to reduce server load
-                delay_seconds=3,  # Respect rate limits
-                num_retries=2  # Fewer retries to avoid long waits
-            )
-            
-            papers = []
-            try:
-                for result in client.results(search):
-                    paper = {
-                        "id": result.entry_id.split('/')[-1],
-                        "title": result.title,
-                        "authors": [str(author) for author in result.authors],
-                        "summary": result.summary,
-                        "url": result.entry_id,
-                        "pdf_url": result.pdf_url,
-                        "published": result.published.strftime('%Y-%m-%d') if result.published else None,
-                        "categories": result.categories,
-                        "source": "arXiv"
-                    }
-                    papers.append(paper)
-                    
-                    # Limit results to avoid timeout issues
-                    if len(papers) >= max_results:
-                        break
-                        
-            except Exception as iteration_error:
-                self.logger.warning(f"ArXiv iteration error (continuing with partial results): {iteration_error}")
-            
-            self.logger.info(f"Found {len(papers)} papers from arXiv for query: {cleaned_query[:50]}...")
-            return papers
-            
-        except Exception as e:
-            self.logger.error(f"arXiv search failed: {e}")
-            return []
-
-    def _optimize_arxiv_query(self, query: str) -> str:
-        """Optimize query for arXiv search"""
-        # Remove question words that don't help search
-        stop_words = ['how', 'what', 'why', 'when', 'where', 'can', 'does', 'is', 'are', 'the', 'a', 'an']
-        
-        # Convert to lowercase and split
-        words = query.lower().split()
-        
-        # Remove stop words but keep important technical terms
-        filtered_words = []
-        for word in words:
-            # Keep the word if it's not a stop word or if it's a technical term
-            if word not in stop_words or len(word) > 6:  # Keep longer words even if they're stop words
-                filtered_words.append(word)
-        
-        # If query is still very long, take first 10 words
-        if len(filtered_words) > 10:
-            filtered_words = filtered_words[:10]
-        
-        optimized = ' '.join(filtered_words)
-        
-        # If optimization removed too much, use original
-        if len(optimized) < len(query) * 0.3:  # If less than 30% remains
-            return query
-        
-        return optimized
-
 
 class OpenAlexSearcher:
     """Search OpenAlex for academic papers - better alternative with higher rate limits"""
@@ -1416,7 +1331,7 @@ class GoogleScholarSearcher:
                 self.consecutive_failures += 1
                 self.logger.warning(f"Google Scholar rate limit (429) - try again later (failure {self.consecutive_failures})")
                 if self.consecutive_failures >= self.max_failures:
-                    self.logger.error("Google Scholar repeatedly failing - consider using only ArXiv and Semantic Scholar")
+                    self.logger.error("Google Scholar repeatedly failing - consider using only OpenAlex")
                 return []
             elif response.status_code == 403:
                 self.consecutive_failures += 1
@@ -1790,8 +1705,7 @@ class AcademicPaperDiscoveryEngine:
         
         # Initialize traditional components
         self.research_extractor = ResearchFocusExtractor(openai_client)
-        self.arxiv_searcher = ArxivSearcher()
-        self.openalex_searcher = OpenAlexSearcher()  # 🚀 NEW: OpenAlex instead of Semantic Scholar
+        self.openalex_searcher = OpenAlexSearcher()  # Using only OpenAlex
         self.scholar_searcher = GoogleScholarSearcher()
         self.relevance_scorer = RelevanceScorer(openai_client)
         self.duplicate_remover = DuplicateRemover(config.DUPLICATE_THRESHOLD)
@@ -1801,7 +1715,11 @@ class AcademicPaperDiscoveryEngine:
         self.vector_db = VectorDatabase()
         self.rag_pipeline = RAGPipelineManager(openai_client, self.vector_db)
         
-        self.logger.info("Academic Paper Discovery Engine initialized with RAG capabilities")
+        # 🔗 Simple Paper Relationships Component
+        self.citation_extractor = CitationDataExtractor(rate_limit_delay=0.1)
+        self.paper_relationships = SimplePaperRelationships(self.citation_extractor)
+        
+        self.logger.info("Academic Paper Discovery Engine initialized with RAG and Citation Network capabilities")
     
     def extract_search_intent(self, research_input: str) -> Dict[str, Any]:
         """Extract search intent and optimize queries for different academic databases"""
@@ -1809,7 +1727,6 @@ class AcademicPaperDiscoveryEngine:
             if not self.openai_client:
                 # Fallback if OpenAI is not available
                 return {
-                    "arxiv_query": research_input.strip(),
                     "openalex_query": research_input.strip(),
                     "openalex_url_params": f"search={urllib.parse.quote(research_input.strip())}",
                     "primary_keywords": research_input.split()[:5],
@@ -1817,18 +1734,17 @@ class AcademicPaperDiscoveryEngine:
                     "intent_confidence": 0.5
                 }
             
-            prompt = f"""You are an expert academic search query optimizer. Analyze the user's research question and create optimized search parameters for academic databases.
+            prompt = f"""You are an expert academic search query optimizer. Analyze the user's research question and create optimized search parameters for OpenAlex academic database.
 
     User's Research Question: "{research_input}"
 
     Generate the following optimized search parameters:
 
-    1. ARXIV_QUERY: Technical keyword query for arXiv (remove question words, focus on key technical terms, max 6-8 words)
-    2. OPENALEX_QUERY: Natural language query for OpenAlex (preserve meaning, works excellently with full questions and natural language)
-    3. OPENALEX_URL_PARAMS: URL-encoded search string ready for OpenAlex API (natural language friendly, focus on key concepts)
-    4. PRIMARY_KEYWORDS: 3-5 most important technical keywords/phrases for relevance scoring
-    5. RESEARCH_DOMAIN: Specific academic field (e.g., "Computer Science - AI", "Software Engineering", "Machine Learning")
-    6. INTENT_CONFIDENCE: Confidence level (0.1-1.0) in understanding the research intent
+    1. OPENALEX_QUERY: Natural language query for OpenAlex (preserve meaning, works excellently with full questions and natural language)
+    2. OPENALEX_URL_PARAMS: URL-encoded search string ready for OpenAlex API (natural language friendly, focus on key concepts)
+    3. PRIMARY_KEYWORDS: 3-5 most important technical keywords/phrases for relevance scoring
+    4. RESEARCH_DOMAIN: Specific academic field (e.g., "Computer Science - AI", "Software Engineering", "Machine Learning")
+    5. INTENT_CONFIDENCE: Confidence level (0.1-1.0) in understanding the research intent
 
     CRITICAL GUIDELINES for OpenAlex queries:
     - OpenAlex works VERY well with natural language queries
@@ -1848,7 +1764,6 @@ class AcademicPaperDiscoveryEngine:
 
     Respond in JSON format:
     {{
-        "arxiv_query": "optimized technical keywords",
         "openalex_query": "natural language research query", 
         "openalex_url_params": "search_ready_query_string",
         "primary_keywords": ["keyword1", "keyword2", "keyword3"],
@@ -1859,9 +1774,8 @@ class AcademicPaperDiscoveryEngine:
             
             # LangChain returns the content directly
             result = json.loads(response.content.strip())
-            
             # Validate and enhance the result
-            required_keys = ['arxiv_query', 'openalex_query', 'openalex_url_params', 'primary_keywords', 'research_domain', 'intent_confidence']
+            required_keys = ['openalex_query', 'openalex_url_params', 'primary_keywords', 'research_domain', 'intent_confidence']
             if all(key in result for key in required_keys):
                 # Ensure URL params are properly formatted for OpenAlex
                 if not result['openalex_url_params'].startswith('search='):
@@ -1896,7 +1810,6 @@ class AcademicPaperDiscoveryEngine:
         url_query = ' '.join(keywords)
         
         return {
-            "arxiv_query": ' '.join(keywords),
             "openalex_query": research_input.strip(),
             "openalex_url_params": f"search={urllib.parse.quote(url_query)}",
             "primary_keywords": keywords,
@@ -1904,12 +1817,96 @@ class AcademicPaperDiscoveryEngine:
             "intent_confidence": 0.3
         }
 
+    def _extract_openalex_work_ids(self, papers: List[Dict]) -> None:
+        """Extract OpenAlex work IDs for all papers and add them to the paper dictionary"""
+        try:
+            import re
+            
+            for paper in papers:
+                if not paper or not isinstance(paper, dict):
+                    continue
+                
+                work_id = None
+                
+                # Method 1: Check if paper already has an OpenAlex ID
+                if paper.get('id') and isinstance(paper['id'], str):
+                    if paper['id'].startswith('https://openalex.org/W'):
+                        work_id = paper['id'].split('/')[-1]  # Extract W123456789
+                    elif paper['id'].startswith('W') and len(paper['id']) > 1:
+                        work_id = paper['id']
+                
+                # Method 2: Check URL field for OpenAlex URLs
+                if not work_id and paper.get('url') and isinstance(paper['url'], str):
+                    if 'openalex.org/W' in paper['url']:
+                        match = re.search(r'openalex\.org/(W\d+)', paper['url'])
+                        if match:
+                            work_id = match.group(1)
+                
+                # Method 3: Check source and extract from paper_id
+                if not work_id and paper.get('source') == 'openalex' and paper.get('paper_id'):
+                    paper_id = str(paper['paper_id'])
+                    if paper_id.startswith('W') and len(paper_id) > 1:
+                        work_id = paper_id
+                    elif paper_id.startswith('https://openalex.org/W'):
+                        work_id = paper_id.split('/')[-1]
+                
+                # Method 4: Try to extract from DOI using OpenAlex API (if we have a DOI)
+                if not work_id and paper.get('doi'):
+                    try:
+                        doi = paper['doi'].replace('https://doi.org/', '').replace('doi:', '').strip()
+                        # Format for potential OpenAlex lookup
+                        openalex_doi_url = f"https://doi.org/{doi}"
+                        
+                        # Try to make a quick API call to get OpenAlex work ID
+                        response = requests.get(
+                            f"https://api.openalex.org/works/{openalex_doi_url}",
+                            timeout=5
+                        )
+                        if response.status_code == 200:
+                            data = response.json()
+                            if data.get('id'):
+                                work_id = data['id'].split('/')[-1]
+                        
+                        # Small delay to respect rate limits
+                        time.sleep(0.1)
+                    except Exception as e:
+                        self.logger.debug(f"Could not fetch OpenAlex ID for DOI {paper.get('doi')}: {e}")
+                
+                # Add the work_id to the paper
+                if work_id:
+                    paper['openalex_work_id'] = work_id
+                    paper['paper_id'] = work_id  # Also set paper_id for compatibility
+                    self.logger.debug(f"Found OpenAlex work ID: {work_id} for paper: {paper.get('title', 'Unknown')[:50]}")
+                else:
+                    paper['openalex_work_id'] = None  # Keep as None for logic, but handle in formatting
+                    self.logger.debug(f"No OpenAlex work ID found for paper: {paper.get('title', 'Unknown')[:50]}")
+            
+            # Print summary of OpenAlex work IDs found
+            papers_with_ids = [p for p in papers if p.get('openalex_work_id')]
+            self.logger.info(f"📊 OpenAlex Work IDs: Found {len(papers_with_ids)}/{len(papers)} papers with work IDs")
+            
+            # Print the discovered work IDs
+            if papers_with_ids:
+                print(f"\n📋 OPENALEX WORK IDs DISCOVERED ({len(papers_with_ids)}/{len(papers)}):")
+                print("=" * 80)
+                for i, paper in enumerate(papers_with_ids, 1):
+                    work_id = paper.get('openalex_work_id') or 'Unknown'
+                    title = (paper.get('title') or 'Unknown Title')[:60]
+                    source = paper.get('source') or 'Unknown'
+                    print(f"{i:2d}. {work_id} | {source:8s} | {title}")
+                print("=" * 80)
+            else:
+                print("\n⚠️  No OpenAlex Work IDs found for any papers")
+                
+        except Exception as e:
+            self.logger.error(f"Failed to extract OpenAlex work IDs: {e}")
+
     def discover_papers(self, research_input: str, sources: List[str] = None, 
                        max_results: int = 10) -> Dict[str, Any]:
         """Main method to discover relevant academic papers"""
         try:
             if sources is None:
-                sources = ["arxiv", "openalex"]
+                sources = ["openalex"]
             
             max_results = min(max_results, config.MAX_ALLOWED_RESULTS)
             
@@ -1924,27 +1921,18 @@ class AcademicPaperDiscoveryEngine:
             self.logger.info(f"Intent detection - Domain: {search_intent.get('research_domain', 'unknown')}")
             self.logger.info(f"Intent detection - Confidence: {search_intent.get('intent_confidence', 0)}")
             
-            # Use optimized queries for each source
-            arxiv_query = search_intent.get('arxiv_query', research_input.strip())
+            # Use optimized query for OpenAlex
             openalex_url_params = search_intent.get('openalex_url_params', f"search={urllib.parse.quote(research_input.strip())}")
             
-            self.logger.info(f"ArXiv query: {arxiv_query}")
             self.logger.info(f"OpenAlex URL params: {openalex_url_params}")
             
-            # Search multiple sources concurrently with optimized queries
+            # Search OpenAlex only
             all_papers = []
             with ThreadPoolExecutor(max_workers=config.MAX_WORKERS) as executor:
                 futures = []
                 
-                if "arxiv" in sources:
-                    futures.append(executor.submit(self.arxiv_searcher.search, arxiv_query, max_results))
-                
                 if "openalex" in sources:
                     futures.append(executor.submit(self.openalex_searcher.search, openalex_url_params, max_results))
-                
-                if "google_scholar" in sources:
-                    # For Google Scholar, use the original research question as it works well with natural language
-                    futures.append(executor.submit(self.scholar_searcher.search, research_input.strip(), max_results))
                 
                 # Collect results
                 for future in as_completed(futures):
@@ -1959,6 +1947,25 @@ class AcademicPaperDiscoveryEngine:
             
             # Remove duplicates
             unique_papers = self.duplicate_remover.remove_duplicates(all_papers)
+            
+            # Extract OpenAlex work IDs for all unique papers
+            self._extract_openalex_work_ids(unique_papers)
+            
+            # Print summary of all unique papers with their OpenAlex work IDs
+            print(f"\n📚 ALL UNIQUE PAPERS WITH OPENALEX IDs ({len(unique_papers)} total):")
+            print("=" * 100)
+            for i, paper in enumerate(unique_papers, 1):
+                work_id = paper.get('openalex_work_id') or 'No Work ID'
+                title = (paper.get('title') or 'Unknown Title')[:50]
+                source = paper.get('source') or 'Unknown'
+                authors = ', '.join(paper.get('authors', [])[:2]) or 'Unknown Authors'
+                print(f"{i:2d}. [{work_id:12s}] {source:8s} | {title}")
+                print(f"     Authors: {authors[:60]}")
+                doi = paper.get('doi')
+                if doi:
+                    print(f"     DOI: {doi}")
+                print()
+            print("=" * 100)
             
             # Calculate relevance scores with enhanced context from AI intent detection
             for paper in unique_papers:
@@ -2011,7 +2018,7 @@ class AcademicPaperDiscoveryEngine:
                     if google_scholar_requested:
                         message += " Google Scholar has strict rate limiting and may block automated requests."
                         suggestions.extend([
-                            "Try using only ArXiv and Semantic Scholar sources",
+                            "Try using only OpenAlex source",
                             "For Google Scholar results, search manually at scholar.google.com",
                             "Wait several minutes before trying Google Scholar again"
                         ])
@@ -2044,7 +2051,6 @@ class AcademicPaperDiscoveryEngine:
                 "sources_searched": sources,
                 "original_query": research_input,
                 "ai_intent_detection": {
-                    "arxiv_query": arxiv_query,
                     "openalex_url_params": openalex_url_params,
                     "research_domain": search_intent.get('research_domain', 'unknown'),
                     "intent_confidence": search_intent.get('intent_confidence', 0),
@@ -2146,8 +2152,7 @@ def health_check():
         "status": "healthy",
         "service": "Academic Paper Discovery Engine",
         "timestamp": datetime.now().isoformat(),
-        "openai_available": openai_client is not None,
-        "arxiv_available": arxiv is not None
+        "openai_available": openai_client is not None
     })
 
 
@@ -2165,7 +2170,7 @@ def discover_papers_endpoint():
         if not research_input:
             return jsonify({"success": False, "error": "Query is required"}), 400
         
-        sources = data.get('sources', ["arxiv", "openalex"])
+        sources = data.get('sources', ["openalex"])
         max_results = min(data.get('max_results', 10), config.MAX_ALLOWED_RESULTS)
         
         logger.info(f"📝 Received discovery request: {research_input[:100]}...")
@@ -2238,6 +2243,17 @@ def discover_papers_endpoint():
             except Exception as e:
                 logger.warning(f"Failed to save search history: {e}")
         
+        # 🐛 Debug: Log OpenAlex work IDs being sent to frontend
+        if result.get('success') and result.get('papers'):
+            work_ids_count = sum(1 for paper in result['papers'] if paper.get('openalex_work_id'))
+            logger.info(f"📤 Sending {work_ids_count}/{len(result['papers'])} papers with OpenAlex work IDs to frontend")
+            
+            # Log a few work IDs for debugging
+            for i, paper in enumerate(result['papers'][:3]):  # First 3 papers
+                work_id = paper.get('openalex_work_id') or 'None'
+                title = (paper.get('title') or 'Unknown')[:40]
+                logger.debug(f"   Paper {i+1}: {work_id} | {title}")
+        
         return jsonify(result)
         
     except Exception as e:
@@ -2263,7 +2279,7 @@ def discover_papers_rag_endpoint():
         if not research_input:
             return jsonify({"success": False, "error": "Query is required"}), 400
         
-        sources = data.get('sources', ["arxiv", "openalex"])
+        sources = data.get('sources', ["openalex"])
         max_results = min(data.get('max_results', 10), config.MAX_ALLOWED_RESULTS)
         
         # Extract user context for personalization
@@ -2379,7 +2395,7 @@ def upload_paper():
             research_query = f"{research_focus['topic']} {' '.join(research_focus['keywords'][:5])}"
             
             # Get parameters from form data
-            sources = request.form.get('sources', 'arxiv,openalex').split(',')
+            sources = request.form.get('sources', 'openalex').split(',')
             max_results = min(int(request.form.get('max_results', config.DEFAULT_MAX_RESULTS)), 
                             config.MAX_ALLOWED_RESULTS)
             
@@ -3073,12 +3089,6 @@ def get_available_sources():
     """Get list of available paper sources"""
     sources = [
         {
-            "id": "arxiv", 
-            "name": "arXiv", 
-            "description": "Open access repository of scientific papers",
-            "available": arxiv is not None
-        },
-        {
             "id": "openalex", 
             "name": "OpenAlex", 
             "description": "Open catalog of scholarly papers with comprehensive metadata",
@@ -3232,6 +3242,147 @@ def check_bookmark_status():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+# 🔗 SIMPLE PAPER RELATIONSHIPS API ENDPOINTS
+
+@app.route('/api/paper-relationships/<paper_id>', methods=['GET'])
+@firebase_auth_optional  
+def explore_paper_relationships(paper_id):
+    """Simple paper relationship explorer - easy to understand and explain"""
+    try:
+        # Optional parameters
+        max_connections = request.args.get('max_connections', 10, type=int)
+        max_connections = min(max(5, max_connections), 20)  # Limit to keep it simple
+        
+        logger.info(f"🔗 Exploring relationships for paper: {paper_id}")
+        
+        # Check if this looks like an OpenAlex work ID
+        if paper_id.startswith('W') and len(paper_id) > 5:
+            logger.info(f"📊 Using OpenAlex work ID for graph building: {paper_id}")
+        else:
+            logger.info(f"📊 Using legacy paper ID for graph building: {paper_id}")
+        
+        # Explore paper connections using simplified approach
+        connections = discovery_engine.paper_relationships.explore_paper_connections(
+            paper_id, max_connections=max_connections
+        )
+        
+        return jsonify(connections)
+        
+    except Exception as e:
+        logger.error(f"Paper relationship exploration failed: {e}")
+        return jsonify({
+            "success": False, 
+            "error": str(e),
+            "message": "Failed to explore paper relationships"
+        }), 500
+
+
+@app.route('/api/paper-family-tree', methods=['POST'])
+@firebase_auth_optional
+def get_paper_family_tree():
+    """Get a simple family tree view of paper relationships"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No JSON data provided"}), 400
+        
+        papers = data.get('papers', [])
+        if not papers:
+            return jsonify({"success": False, "error": "No papers provided"}), 400
+        
+        # Extract paper IDs
+        paper_ids = []
+        for paper in papers[:3]:  # Limit to 3 papers to keep it simple
+            paper_id = paper.get('id') or paper.get('url', '') or paper.get('paper_id', '')
+            if paper_id:
+                paper_ids.append(paper_id)
+        
+        if not paper_ids:
+            return jsonify({"success": False, "error": "No valid paper IDs found"}), 400
+        
+        logger.info(f"Creating family trees for {len(paper_ids)} papers")
+        
+        # Create simple family trees for multiple papers
+        result = discovery_engine.paper_relationships.explore_multiple_papers(paper_ids)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Family tree generation failed: {e}")
+        return jsonify({
+            "success": False, 
+            "error": str(e),
+            "message": "Failed to generate paper family trees"
+        }), 500
+
+
+@app.route('/api/paper-insights/<paper_id>', methods=['GET'])
+@firebase_auth_optional
+def get_paper_insights(paper_id):
+    """Get quick insights about a paper's influence and connections"""
+    try:
+        logger.info(f"Getting insights for paper: {paper_id}")
+        
+        # Get paper connections
+        connections = discovery_engine.paper_relationships.explore_paper_connections(
+            paper_id, max_connections=10
+        )
+        
+        if not connections.get('success'):
+            return jsonify(connections), 400
+        
+        # Extract key insights for quick display
+        insights = {
+            "success": True,
+            "paper_id": paper_id,
+            "paper_info": connections.get('paper_info', {}),
+            "quick_stats": {
+                "foundation_papers": len(connections.get('connections', {}).get('foundation_papers', [])),
+                "building_papers": len(connections.get('connections', {}).get('building_papers', [])),
+                "influence_score": connections.get('insights', {}).get('influence_score', 0),
+                "impact_level": connections.get('insights', {}).get('impact_level', 'unknown')
+            },
+            "key_insights": connections.get('insights', {}).get('insights', [])[:3],  # Top 3 insights
+            "related_authors": connections.get('connections', {}).get('related_authors', [])[:3]
+        }
+        
+        return jsonify(insights)
+        
+    except Exception as e:
+        logger.error(f"Paper insights endpoint failed: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "message": "Failed to get paper insights"
+        }), 500
+
+
+@app.route('/api/paper-relationships/features', methods=['GET'])
+@firebase_auth_optional
+def get_enhanced_features_info():
+    """Get information about enhanced paper relationship features"""
+    try:
+        logger.info("Fetching enhanced features information")
+        
+        # Get enhanced features demo info
+        demo_info = discovery_engine.paper_relationships.get_enhanced_features_demo()
+        
+        return jsonify({
+            "success": True,
+            "features": demo_info,
+            "timestamp": datetime.now().isoformat(),
+            "message": "Enhanced paper relationship features with scholarly+networkx integration"
+        })
+        
+    except Exception as e:
+        logger.error(f"Enhanced features info failed: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "message": "Failed to get enhanced features information"
+        }), 500
+
+
 # 🧠 VECTOR DATABASE API ENDPOINTS
 
 @app.route('/api/vector-db/stats', methods=['GET'])
@@ -3304,6 +3455,12 @@ if __name__ == '__main__':
     logger.info("- POST /api/discover-papers-rag - 🧠 RAG-enhanced discovery")
     logger.info("- POST /api/upload-paper - Upload paper to find similar research")
     logger.info("- POST /api/download-paper - Download and analyze paper from URL")
+    logger.info("")
+    logger.info("🔗 PAPER RELATIONSHIPS (Simple & Easy to Understand):")
+    logger.info("- GET /api/paper-relationships/<paper_id> - Explore paper family tree")
+    logger.info("- POST /api/paper-family-tree - Get family trees for multiple papers")
+    logger.info("- GET /api/paper-insights/<paper_id> - Quick paper influence insights")
+    logger.info("- GET /api/paper-relationships/features - Enhanced features info (scholarly+networkx)")
     logger.info("")
     logger.info("🧠 VECTOR DATABASE:")
     logger.info("- GET /api/vector-db/stats - Database statistics & persistence info")

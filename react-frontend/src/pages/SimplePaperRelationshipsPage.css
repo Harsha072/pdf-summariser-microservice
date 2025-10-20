@@ -1,0 +1,393 @@
+/* Simple Paper Relationships Page Styles */
+
+.paper-relationships-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20px;
+}
+
+.page-header {
+  text-align: center;
+  color: white;
+  margin-bottom: 40px;
+  padding: 40px 20px;
+}
+
+.page-header h1 {
+  font-size: 36px;
+  margin: 0 0 15px 0;
+  font-weight: 700;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.page-subtitle {
+  font-size: 18px;
+  margin: 0;
+  opacity: 0.9;
+  max-width: 600px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+.current-paper-info {
+  margin-top: 20px;
+  padding: 15px 20px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.current-paper-label {
+  font-size: 14px;
+  opacity: 0.8;
+  margin-bottom: 5px;
+  font-weight: 500;
+}
+
+.current-paper-title {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.current-paper-info {
+  margin-top: 25px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.current-paper-label {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.current-paper-title {
+  font-size: 18px;
+  color: white;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* Examples Section */
+.examples-section {
+  background: white;
+  border-radius: 12px;
+  padding: 30px;
+  margin-bottom: 30px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.examples-section h3 {
+  text-align: center;
+  color: #2c3e50;
+  margin: 0 0 25px 0;
+  font-size: 24px;
+}
+
+.example-papers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.example-paper-card {
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.example-paper-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-color: #667eea;
+}
+
+.example-paper-card h4 {
+  color: #2c3e50;
+  margin: 0 0 10px 0;
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+.example-paper-card p {
+  color: #666;
+  margin: 0 0 15px 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.try-example-btn {
+  background: #3498db;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  margin-bottom: 10px;
+  transition: background 0.3s ease;
+}
+
+.try-example-btn:hover {
+  background: #2980b9;
+}
+
+.paper-id-display {
+  margin-top: 10px;
+  padding: 8px;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+
+.paper-id-display code {
+  color: #e74c3c;
+  font-family: 'Monaco', 'Consolas', monospace;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Recent Section */
+.recent-section {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 30px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.recent-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.recent-header h4 {
+  color: #2c3e50;
+  margin: 0;
+  font-size: 18px;
+}
+
+.clear-recent-btn {
+  background: #95a5a6;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.clear-recent-btn:hover {
+  background: #7f8c8d;
+}
+
+.recent-papers {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.recent-paper-btn {
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  padding: 8px 15px;
+  border-radius: 20px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-family: 'Monaco', 'Consolas', monospace;
+}
+
+.recent-paper-btn:hover {
+  background: #e9ecef;
+  border-color: #ced4da;
+}
+
+.recent-paper-btn.active {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
+}
+
+/* Main Content */
+.main-content {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  margin-bottom: 30px;
+  min-height: 400px;
+}
+
+/* How It Works */
+.how-it-works {
+  background: white;
+  border-radius: 12px;
+  padding: 30px;
+  margin-bottom: 30px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.how-it-works h3 {
+  text-align: center;
+  color: #2c3e50;
+  margin: 0 0 30px 0;
+  font-size: 24px;
+}
+
+.explanation-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+}
+
+.explanation-card {
+  text-align: center;
+  padding: 25px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.explanation-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-color: #667eea;
+}
+
+.card-icon {
+  font-size: 48px;
+  margin-bottom: 15px;
+}
+
+.explanation-card h4 {
+  color: #2c3e50;
+  margin: 0 0 10px 0;
+  font-size: 18px;
+}
+
+.explanation-card p {
+  color: #666;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Benefits Section */
+.benefits-section {
+  background: white;
+  border-radius: 12px;
+  padding: 30px;
+  margin-bottom: 30px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.benefits-section h3 {
+  color: #2c3e50;
+  margin: 0 0 20px 0;
+  font-size: 24px;
+  text-align: center;
+}
+
+.benefits-section ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.benefits-section li {
+  padding: 15px 0;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: #2c3e50;
+}
+
+.benefits-section li:last-child {
+  border-bottom: none;
+}
+
+.benefits-section li strong {
+  color: #667eea;
+  font-weight: 600;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .paper-relationships-page {
+    padding: 15px;
+  }
+  
+  .page-header {
+    padding: 30px 15px;
+  }
+  
+  .page-header h1 {
+    font-size: 28px;
+  }
+  
+  .page-subtitle {
+    font-size: 16px;
+  }
+  
+  .input-group {
+    flex-direction: column;
+  }
+  
+  .explore-btn {
+    white-space: normal;
+  }
+  
+  .example-list {
+    flex-direction: column;
+    gap: 15px;
+  }
+  
+  .explanation-cards {
+    grid-template-columns: 1fr;
+  }
+  
+  .recent-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  
+  .recent-papers {
+    flex-direction: column;
+  }
+  
+  .recent-paper-btn {
+    text-align: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .examples-section {
+    padding: 20px;
+  }
+  
+  .example-papers {
+    grid-template-columns: 1fr;
+  }
+}

@@ -97,7 +97,7 @@ const SearchHistory = () => {
 
   const formatSources = (sources) => {
     const sourceNames = {
-      'arxiv': 'arXiv',
+      'openalex': 'OpenAlex',
       'semantic_scholar': 'Semantic Scholar',
       'google_scholar': 'Google Scholar'
     };

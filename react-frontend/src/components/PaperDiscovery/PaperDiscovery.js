@@ -9,19 +9,19 @@ import './PaperDiscovery.css';
 const PaperDiscovery = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, refreshToken } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [uploadedFile, setUploadedFile] = useState(null);
   const [discoveredPapers, setDiscoveredPapers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedSources, setSelectedSources] = useState(['arxiv', 'openalex']);
+  const [selectedSources, setSelectedSources] = useState(['openalex']);
   const [maxResults, setMaxResults] = useState(10);
   const [error, setError] = useState('');
   const [cacheStatus, setCacheStatus] = useState('');
   const [bookmarkStatus, setBookmarkStatus] = useState({}); // Track bookmark status for papers
+  const [buildingGraphFor, setBuildingGraphFor] = useState(null); // Track which paper is building graph
 
   const availableSources = [
-    { id: 'arxiv', name: 'arXiv', description: 'Open access repository of scientific papers' },
     { id: 'openalex', name: 'OpenAlex', description: 'Open catalog of scholarly papers with comprehensive metadata' },
     { id: 'google_scholar', name: 'Google Scholar', description: 'Web search for scholarly literature' }
   ];
@@ -76,7 +76,7 @@ const PaperDiscovery = () => {
             const mostRecent = cachedData.results[0];
             setSearchQuery(mostRecent.query || '');
             setDiscoveredPapers(mostRecent.results?.papers || []);
-            setSelectedSources(mostRecent.sources || ['arxiv', 'openalex']);
+            setSelectedSources(mostRecent.sources || ['openalex']);
             setMaxResults(mostRecent.max_results || 10);
             setCacheStatus(`Loaded cached results from ${new Date(mostRecent.timestamp).toLocaleTimeString()}`);
           } else if (cachedData.result) {
@@ -101,6 +101,110 @@ const PaperDiscovery = () => {
     
     // Navigate to details page
     navigate(`/paper-details/${paperId}`);
+  };
+
+  const handleBuildGraph = async (paper) => {
+    // Use OpenAlex work ID if available, otherwise fall back to existing logic
+    let paperId = paper.openalex_work_id || paper.paper_id || paper.id;
+    
+    // If we still don't have a work ID but have a URL, try to extract it
+    if (!paperId && paper.url && paper.url.includes('openalex.org/W')) {
+      paperId = paper.url.split('/W')[1] || paper.url.split('W')[1];
+      if (paperId.startsWith('W')) {
+        paperId = paperId; // Keep the W prefix for OpenAlex IDs
+      } else {
+        paperId = 'W' + paperId; // Add W prefix if missing
+      }
+    }
+    
+    // Legacy fallback for other ID formats
+    if (!paperId) {
+      paperId = paper.paper_id || paper.id;
+      if (paperId && paperId.includes('openalex.org/W')) {
+        paperId = paperId.split('/W')[1] || paperId.split('W')[1];
+      } else if (paperId && paperId.startsWith('W')) {
+        paperId = paperId; // Keep as is for OpenAlex work IDs
+      }
+    }
+    
+    if (!paperId) {
+      alert('Unable to build graph: Paper ID not found');
+      return;
+    }
+    
+    console.log('🔄 Building network graph for paper:', paperId, paper.title);
+    console.log('📋 Using OpenAlex work ID:', paper.openalex_work_id || 'Not available');
+    
+    try {
+      // Show loading state for this specific paper
+      setBuildingGraphFor(paper.paper_id || paperId);
+      setError('');
+      
+      // Call the backend API to build the graph
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      
+      // Add authorization header if user is authenticated
+      if (user && refreshToken) {
+        try {
+          const token = await refreshToken();
+          if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+            console.log('✅ Firebase token obtained successfully');
+          }
+        } catch (tokenError) {
+          console.warn('⚠️ Failed to get user token:', tokenError);
+          // Continue without token
+        }
+      }
+      
+      const response = await fetch(`http://localhost:5000/api/paper-relationships/${encodeURIComponent(paperId)}?max_connections=10`, {
+        method: 'GET',
+        headers: headers
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const graphData = await response.json();
+      
+      if (graphData.success) {
+        console.log('✅ Graph data received:', graphData);
+        
+        // Navigate to the SimplePaperRelationships page with the graph data
+        navigate('/paper-relationships', { 
+          state: { 
+            paperId: paperId,
+            paperTitle: paper.title,
+            fromDiscovery: true,
+            openalexWorkId: paper.openalex_work_id,
+            graphData: graphData // Pass the pre-fetched graph data
+          } 
+        });
+      } else {
+        throw new Error(graphData.error || 'Failed to build graph');
+      }
+      
+    } catch (error) {
+      console.error('❌ Error building graph:', error);
+      setError(`Failed to build graph: ${error.message}`);
+      
+      // Still navigate to the page but without pre-fetched data
+      // The SimplePaperRelationships component will handle the API call
+      navigate('/paper-relationships', { 
+        state: { 
+          paperId: paperId,
+          paperTitle: paper.title,
+          fromDiscovery: true,
+          openalexWorkId: paper.openalex_work_id,
+          error: error.message
+        } 
+      });
+    } finally {
+      setBuildingGraphFor(null);
+    }
   };
 
   const handleSearchByQuery = async () => {
@@ -417,11 +521,24 @@ const PaperDiscovery = () => {
         <div className="results-section">
           <div className="results-header">
             <h3>📚 Discovered Papers ({discoveredPapers.length})</h3>
-            {cacheStatus && (
-              <div className="cache-status">
-                <span className="cache-indicator">🔄 {cacheStatus}</span>
-              </div>
-            )}
+            <div className="results-actions">
+              {cacheStatus && (
+                <div className="cache-status">
+                  <span className="cache-indicator">🔄 {cacheStatus}</span>
+                </div>
+              )}
+              <button
+                onClick={() => navigate('/paper-relationships', { 
+                  state: { papers: discoveredPapers.slice(0, 5) } 
+                })}
+                className="citation-network-btn"
+                disabled={discoveredPapers.length === 0}
+                title="Explore paper relationships with discovered papers"
+              >
+                <i className="fas fa-project-diagram"></i>
+                Explore Paper Network
+              </button>
+            </div>
           </div>
           
           {/* Authorization info for search results */}
@@ -499,6 +616,8 @@ const PaperDiscovery = () => {
                   index={index}
                   onViewDetails={handleViewDetails}
                   onDownloadPaper={downloadPaper}
+                  onBuildGraph={handleBuildGraph}
+                  isBuildingGraph={buildingGraphFor === (paper.paper_id || paper.id)}
                 />
               </div>
             ))}
