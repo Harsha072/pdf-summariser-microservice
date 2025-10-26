@@ -18,7 +18,7 @@ const getSessionId = () => {
 // Get Firebase auth headers
 const getAuthHeaders = () => {
   const token = localStorage.getItem('firebase_token');
-  console.log('🔑 Auth token status:', token ? 'Present' : 'Missing');
+  console.log('Auth token status:', token ? 'Present' : 'Missing');
   
   const headers = {
     'Content-Type': 'application/json',
@@ -26,10 +26,10 @@ const getAuthHeaders = () => {
   
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
-    console.log('🔐 Added Authorization header to request');
-    console.log('📋 Full headers object:', headers);
+    console.log('Added Authorization header to request');
+    console.log('Full headers object:', headers);
   } else {
-    console.warn('⚠️ No Firebase token found in localStorage');
+    console.warn('No Firebase token found in localStorage');
   }
   
   return headers;
@@ -49,7 +49,7 @@ const authenticatedFetch = async (url, options = {}) => {
 
     // If unauthorized and we have a refresh function available, try refreshing token
     if (response.status === 401) {
-      console.log('🔄 Token expired, attempting refresh...');
+      console.log('Token expired, attempting refresh...');
       
       // Try to get fresh token from Firebase
       const currentUser = auth.currentUser;
@@ -57,7 +57,7 @@ const authenticatedFetch = async (url, options = {}) => {
         try {
           const newToken = await currentUser.getIdToken(true);
           localStorage.setItem('firebase_token', newToken);
-          console.log('✅ Token refreshed successfully');
+          console.log('Token refreshed successfully');
           
           // Retry the request with new token
           const retryResponse = await fetch(url, {
@@ -70,20 +70,20 @@ const authenticatedFetch = async (url, options = {}) => {
           
           return retryResponse;
         } catch (tokenError) {
-          console.error('❌ Token refresh failed:', tokenError);
+          console.error('Token refresh failed:', tokenError);
           // Clear invalid token
           localStorage.removeItem('firebase_token');
           throw new Error('Authentication failed. Please sign in again.');
         }
       } else {
-        console.warn('⚠️ No current user found for token refresh');
+        console.warn('No current user found for token refresh');
         throw new Error('Please sign in to access this feature.');
       }
     }
 
     return response;
   } catch (error) {
-    console.error('🚨 API request failed:', error);
+    console.error('API request failed:', error);
     throw error;
   }
 };
@@ -263,10 +263,10 @@ export const clearCache = async (sessionOnly = false) => {
 export const getCachedSearchResults = async (query = null) => {
   try {
     const sessionId = getSessionId();
-    console.log('🔍 Getting cached results - Session ID:', sessionId);
+    console.log('Getting cached results - Session ID:', sessionId);
     
     if (!sessionId) {
-      console.log('⚠️ No session ID found');
+      console.log('No session ID found');
       return { success: true, has_cache: false, message: 'No session ID' };
     }
 
@@ -275,7 +275,7 @@ export const getCachedSearchResults = async (query = null) => {
       body.query = query;
     }
     
-    console.log('📤 Sending cache request with body:', body);
+    console.log('Sending cache request with body:', body);
 
     const response = await fetch(`${API_BASE_URL}/api/cache/search-results`, {
       method: 'POST',
@@ -284,7 +284,7 @@ export const getCachedSearchResults = async (query = null) => {
     });
     
     const result = await response.json();
-    console.log('📥 Cache response:', result);
+    console.log('Cache response:', result);
     return result;
   } catch (error) {
     console.error('Failed to get cached search results:', error);

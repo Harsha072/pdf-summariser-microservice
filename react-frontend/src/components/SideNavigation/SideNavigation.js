@@ -12,28 +12,28 @@ const SideNavigation = () => {
       title: "Research",
       items: [
         {
-          icon: "🔍",
+          icon: "",
           label: "Discover Papers",
           path: "/",
           description: "Search academic papers",
           badge: null
         },
         {
-          icon: "🔗",
+          icon: "",
           label: "Paper Relationships",
           path: "/paper-relationships",
           description: "Explore paper family trees",
           badge: "SIMPLE"
         },
         {
-          icon: "�📋",
+          icon: "",
           label: "Search History",
           path: "/history",
           description: "Recent searches",
           badge: "3"
         },
         {
-          icon: "⭐",
+          icon: "",
           label: "Saved Papers",
           path: "/saved",
           description: "Bookmarked papers",
@@ -45,21 +45,21 @@ const SideNavigation = () => {
       title: "Settings",
       items: [
         {
-          icon: "❓",
+          icon: "",
           label: "Help & Guide",
           path: "/help",
           description: "Usage instructions",
           badge: null
         },
         {
-          icon: "📈",
+          icon: "",
           label: "User Profile",
           path: "/profile",
           description: "User Profile",
           badge: null
         },
         {
-          icon: "⚙️",
+          icon: "",
           label: "Login/Logout",
           path: "/login",
           description: "Authentication",
@@ -111,7 +111,7 @@ const SideNavigation = () => {
       <nav className={`side-navigation ${isOpen ? 'open' : ''}`}>
         <div className="nav-header">
           <div className="nav-brand">
-            <span className="brand-icon">🔬</span>
+            <span className="brand-icon"></span>
             <h2>Paper Discovery</h2>
           </div>
           <button 
@@ -119,7 +119,7 @@ const SideNavigation = () => {
             onClick={closeNavigation}
             aria-label="Close navigation"
           >
-            ✕
+            ×
           </button>
         </div>
 
@@ -152,7 +152,7 @@ const SideNavigation = () => {
         <div className="nav-footer">
           <div className="session-info">
             <span className="session-label">Session Active</span>
-            <span className="session-status">🟢</span>
+            <span className="session-status">●</span>
           </div>
           <div className="app-version">
             <span>Academic Paper Discovery v2.0</span>

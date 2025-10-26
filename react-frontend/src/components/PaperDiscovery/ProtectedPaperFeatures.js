@@ -26,7 +26,7 @@ const ProtectedPaperActions = ({
         fallback={
           <div className="protected-action-placeholder">
             <button className="action-button details disabled">
-              🔍 View AI Analysis 🔒
+              View AI Analysis
             </button>
             <div className="auth-hint">
               <small>Sign in to view detailed AI analysis</small>
@@ -41,7 +41,7 @@ const ProtectedPaperActions = ({
           onClick={() => onViewDetails(paper, index)}
           className="action-button details"
         >
-          🔍 View AI Analysis
+          View AI Analysis
         </button>
       </ProtectedFeature>
 
@@ -54,7 +54,7 @@ const ProtectedPaperActions = ({
           fallback={
             <div className="protected-action-placeholder">
               <button className="action-button download disabled">
-                📄 Download PDF 🔒
+                Download PDF
               </button>
               <div className="auth-hint">
                 <small>Sign in to download papers</small>
@@ -69,7 +69,7 @@ const ProtectedPaperActions = ({
             onClick={() => onDownloadPaper(paper.pdf_url, paper.title)}
             className="action-button download"
           >
-            📄 Download PDF
+            Download PDF
           </button>
         </ProtectedFeature>
       )}
@@ -81,7 +81,7 @@ const ProtectedPaperActions = ({
           className="action-button graph"
           title="Build network analysis graph for this paper"
         >
-          📊 Build Graph
+          Build Graph
         </button>
       ) : (
         <button 
@@ -89,7 +89,7 @@ const ProtectedPaperActions = ({
           title="Graph building not available for this paper (missing paper ID)"
           disabled
         >
-          📊 Build Graph (N/A)
+          Build Graph (N/A)
         </button>
       )}
 
@@ -99,7 +99,7 @@ const ProtectedPaperActions = ({
           onClick={() => window.open(paper.url, '_blank')}
           className="action-button external"
         >
-          🔗 Open Online
+          Open Online
         </button>
       )}
     </div>
@@ -131,7 +131,7 @@ const AuthQuickButton = ({ feature }) => {
       disabled={loading}
       title={`Sign in with Google to ${feature}`}
     >
-      {loading ? '...' : '🔐 Sign In'}
+      {loading ? '...' : 'Sign In'}
     </button>
   );
 };
@@ -154,10 +154,10 @@ export const SmartPaperActions = ({
       <div className="paper-actions-protected">
         <div className="protected-features-notice">
           <div className="notice-content">
-            <span className="notice-icon">🔒</span>
+            <span className="notice-icon"></span>
             <div className="notice-text">
               <strong>Sign in for full access</strong>
-              <p>Download papers and view detailed AI analysis</p>
+              <p>View detailed AI analysis and build paper networks</p>
             </div>
           </div>
           <div className="notice-actions">
@@ -175,7 +175,7 @@ export const SmartPaperActions = ({
               title="Build network analysis graph for this paper"
               disabled={isBuildingGraph}
             >
-              {isBuildingGraph ? '🔄 Building...' : '📊 Build Graph'}
+              {isBuildingGraph ? 'Building...' : 'Build Graph'}
             </button>
           ) : (
             <button 
@@ -183,16 +183,7 @@ export const SmartPaperActions = ({
               title="Graph building not available for this paper (missing paper ID)"
               disabled
             >
-              📊 Build Graph (N/A)
-            </button>
-          )}
-          
-          {paper.url && (
-            <button 
-              onClick={() => window.open(paper.url, '_blank')}
-              className="action-button external"
-            >
-              🔗 Open Online
+              Build Graph (N/A)
             </button>
           )}
         </div>
@@ -200,23 +191,15 @@ export const SmartPaperActions = ({
     );
   }
 
-  // User is authenticated - show all actions
+  // User is authenticated - show only View AI Analysis and Build Graph
   return (
     <div className="paper-actions">
       <button 
         onClick={() => onViewDetails(paper, index)}
         className="action-button details"
       >
-        🔍 View AI Analysis
+        View AI Analysis
       </button>
-      {paper.pdf_url && (
-        <button 
-          onClick={() => onDownloadPaper(paper.pdf_url, paper.title)}
-          className="action-button download"
-        >
-          📄 Download PDF
-        </button>
-      )}
       
       {/* Build Graph - Always Available */}
       {(paper.paper_id || paper.id) ? (
@@ -226,7 +209,7 @@ export const SmartPaperActions = ({
           title="Build network analysis graph for this paper"
           disabled={isBuildingGraph}
         >
-          {isBuildingGraph ? '� Building...' : '�📊 Build Graph'}
+          {isBuildingGraph ? 'Building...' : 'Build Graph'}
         </button>
       ) : (
         <button 
@@ -234,16 +217,7 @@ export const SmartPaperActions = ({
           title="Graph building not available for this paper (missing paper ID)"
           disabled
         >
-          📊 Build Graph (N/A)
-        </button>
-      )}
-      
-      {paper.url && (
-        <button 
-          onClick={() => window.open(paper.url, '_blank')}
-          className="action-button external"
-        >
-          🔗 Open Online
+          Build Graph (N/A)
         </button>
       )}
     </div>

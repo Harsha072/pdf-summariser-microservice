@@ -77,7 +77,7 @@ const PaperDetails = () => {
     return (
       <div className="paper-details">
         <div className="error-container">
-          <h2>⚠️ Error</h2>
+          <h2>Error</h2>
           <p>{error}</p>
           <button onClick={handleBackClick} className="back-button">
             ← Back to Results
@@ -91,7 +91,7 @@ const PaperDetails = () => {
     return (
       <div className="paper-details">
         <div className="error-container">
-          <h2>📄 Paper Not Found</h2>
+          <h2>Paper Not Found</h2>
           <p>The requested paper details could not be loaded.</p>
           <button onClick={handleBackClick} className="back-button">
             ← Back to Results
@@ -179,18 +179,18 @@ const PaperDetails = () => {
 
         {/* AI-Generated Analysis */}
         <div className="analysis-section">
-          <h2>🤖 AI-Generated Analysis</h2>
+          <h2>AI-Generated Analysis</h2>
           
           <div className="analysis-grid">
             {/* Brief Summary */}
             <div className="analysis-card full-width">
-              <h3>📝 Brief Summary</h3>
+              <h3>Brief Summary</h3>
               <p className="brief-summary">{analysis.brief_summary}</p>
             </div>
 
             {/* Detailed Summary */}
             <div className="analysis-card full-width">
-              <h3>📖 Detailed Analysis</h3>
+              <h3>Detailed Analysis</h3>
               <div className="detailed-summary">
                 {analysis.detailed_summary.split('\n').map((paragraph, index) => (
                   <p key={index}>{paragraph}</p>
@@ -200,7 +200,7 @@ const PaperDetails = () => {
 
             {/* Key Contributions */}
             <div className="analysis-card">
-              <h3>🎯 Key Contributions</h3>
+              <h3>Key Contributions</h3>
               <ul className="contribution-list">
                 {analysis.key_contributions.map((contribution, index) => (
                   <li key={index}>{contribution}</li>
@@ -210,13 +210,13 @@ const PaperDetails = () => {
 
             {/* Methodology */}
             <div className="analysis-card">
-              <h3>🔬 Methodology</h3>
+              <h3>Methodology</h3>
               <p>{analysis.methodology}</p>
             </div>
 
             {/* Practical Applications */}
             <div className="analysis-card">
-              <h3>💡 Practical Applications</h3>
+              <h3>Practical Applications</h3>
               <ul className="applications-list">
                 {analysis.practical_applications.map((application, index) => (
                   <li key={index}>{application}</li>
@@ -226,7 +226,7 @@ const PaperDetails = () => {
 
             {/* Strengths and Limitations */}
             <div className="analysis-card">
-              <h3>✅ Strengths</h3>
+              <h3>Strengths</h3>
               <ul className="strengths-list">
                 {analysis.strengths.map((strength, index) => (
                   <li key={index}>{strength}</li>
@@ -235,7 +235,7 @@ const PaperDetails = () => {
             </div>
 
             <div className="analysis-card">
-              <h3>⚠️ Limitations</h3>
+              <h3>Limitations</h3>
               <ul className="limitations-list">
                 {analysis.limitations.map((limitation, index) => (
                   <li key={index}>{limitation}</li>
@@ -245,12 +245,12 @@ const PaperDetails = () => {
 
             {/* Target Audience and Related Topics */}
             <div className="analysis-card">
-              <h3>👥 Target Audience</h3>
+              <h3>Target Audience</h3>
               <p>{analysis.target_audience}</p>
             </div>
 
             <div className="analysis-card">
-              <h3>🔗 Related Topics</h3>
+              <h3>Related Topics</h3>
               <div className="related-topics">
                 {analysis.related_topics.map((topic, index) => (
                   <span key={index} className="topic-tag">{topic}</span>
@@ -260,7 +260,7 @@ const PaperDetails = () => {
 
             {/* Recommendation */}
             <div className="analysis-card full-width recommendation-card">
-              <h3>💬 AI Recommendation</h3>
+              <h3>AI Recommendation</h3>
               <p className="recommendation-text">{analysis.recommendation}</p>
             </div>
           </div>
@@ -269,7 +269,7 @@ const PaperDetails = () => {
         {/* Original Abstract */}
         {paper.summary && (
           <div className="original-abstract-section">
-            <h2>📄 Original Abstract</h2>
+            <h2>Original Abstract</h2>
             <div className="original-abstract">
               <p>{paper.summary}</p>
             </div>
@@ -278,13 +278,13 @@ const PaperDetails = () => {
 
         {/* Paper Actions */}
         <div className="paper-actions-section">
-          <h2>🔗 Access & Explore</h2>
+          <h2>Access & Explore</h2>
           <div className="action-buttons">
             <button
               onClick={() => navigate(`/paper-relationships?paperId=${encodeURIComponent(paper.id || paper.url || paperId)}`)}
               className="action-button relationships"
             >
-              🔗 Explore Paper Relationships
+              Explore Paper Relationships
             </button>
             
             {paper.url && (
@@ -294,7 +294,7 @@ const PaperDetails = () => {
                 rel="noopener noreferrer"
                 className="action-button external"
               >
-                📖 View Paper Online
+                View Paper Online
               </a>
             )}
             
@@ -305,7 +305,7 @@ const PaperDetails = () => {
                 rel="noopener noreferrer"
                 className="action-button download"
               >
-                📥 Download PDF
+                Download PDF
               </a>
             )}
           </div>

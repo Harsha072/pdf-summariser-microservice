@@ -32,21 +32,30 @@ class CitationDataExtractor:
         if not paper_id:
             return ""
         
-        print("in format openalex id", paper_id)
+        self.logger.info(f"Formatting OpenAlex ID for: {paper_id}")
         # Remove whitespace
         clean_id = paper_id.strip()
         
         # If already a full OpenAlex URL, return as-is
         if clean_id.startswith('https://openalex.org/W'):
+            self.logger.info(f"Already formatted OpenAlex URL: {clean_id}")
             return clean_id
         
         # If already has W prefix, add the base URL
         if clean_id.startswith('W') and len(clean_id) > 1:
-            return f"https://openalex.org/{clean_id}"
+            formatted_id = f"https://openalex.org/{clean_id}"
+            self.logger.info(f"Added base URL to W-prefixed ID: {formatted_id}")
+            return formatted_id
         
         # For digit-only IDs, add W prefix and create OpenAlex URL
         if clean_id.isdigit() or clean_id.replace('-', '').isdigit():
-            return f"https://openalex.org/W{clean_id}"
+            formatted_id = f"https://openalex.org/W{clean_id}"
+            self.logger.info(f"Formatted digit ID to OpenAlex URL: {formatted_id}")
+            return formatted_id
+        
+        # For DOI or other formats, try to use as-is
+        self.logger.warning(f"Unknown ID format, using as-is: {clean_id}")
+        return clean_id
         
         # Default: assume it's an OpenAlex work ID and add W prefix
         return f"https://openalex.org/W{clean_id}"
@@ -147,6 +156,12 @@ class CitationDataExtractor:
             citations = []
             
             for work in data.get('results', []):
+                # Handle missing abstracts with fallback
+                abstract = work.get('abstract')
+                if not abstract or abstract.strip() == '':
+                    concepts = [concept.get('display_name', '') for concept in work.get('concepts', [])[:3]]
+                    abstract = f"[Abstract not available] Research about {', '.join(concepts) if concepts else 'scientific topics'}."
+                
                 citation = {
                     'id': work.get('id', ''),
                     'title': work.get('title', ''),
@@ -155,11 +170,12 @@ class CitationDataExtractor:
                     'authors': [
                         author.get('author', {}).get('display_name', '') 
                         for author in work.get('authorships', [])
+                        if author.get('author', {}).get('display_name', '')
                     ],
                     'venue': work.get('primary_location', {}).get('source', {}).get('display_name', ''),
                     'doi': work.get('doi'),
                     'url': work.get('id', ''),
-                    'abstract': work.get('abstract'),
+                    'abstract': abstract,
                     'concepts': [
                         concept.get('display_name', '') 
                         for concept in work.get('concepts', [])[:5]
@@ -212,6 +228,12 @@ class CitationDataExtractor:
             response.raise_for_status()
             
             paper_data = response.json()
+            
+            # Check if paper_data is valid
+            if not paper_data or not isinstance(paper_data, dict):
+                self.logger.warning(f"Invalid or empty response from OpenAlex for {paper_id}")
+                return []
+            
             referenced_works = paper_data.get('referenced_works', [])
             
             if not referenced_works:
@@ -231,9 +253,16 @@ class CitationDataExtractor:
             response.raise_for_status()
             
             data = response.json()
+            # print("getting data ",data)
             references = []
             
             for work in data.get('results', []):
+                # Handle missing abstract
+                abstract = work.get('abstract')
+                if not abstract or abstract.strip() == '':
+                    concepts = [concept.get('display_name', '') for concept in work.get('concepts', [])[:3]]
+                    abstract = f"[Abstract not available] Research about {', '.join(concepts) if concepts else 'scientific topics'}."
+                
                 reference = {
                     'id': work.get('id', ''),
                     'title': work.get('title', ''),
@@ -242,11 +271,12 @@ class CitationDataExtractor:
                     'authors': [
                         author.get('author', {}).get('display_name', '') 
                         for author in work.get('authorships', [])
+                        if author.get('author', {}).get('display_name', '')
                     ],
                     'venue': work.get('primary_location', {}).get('source', {}).get('display_name', ''),
                     'doi': work.get('doi'),
                     'url': work.get('id', ''),
-                    'abstract': work.get('abstract'),
+                    'abstract': abstract,
                     'concepts': [
                         concept.get('display_name', '') 
                         for concept in work.get('concepts', [])[:5]
@@ -358,7 +388,15 @@ class CitationDataExtractor:
                 return self._get_openalex_metadata(paper_id)
             elif source == "semantic_scholar":
                 return self._get_semantic_scholar_metadata(paper_id)
+            elif source == "auto":
+                # Try OpenAlex first, fallback to Semantic Scholar
+                metadata = self._get_openalex_metadata(paper_id)
+                if not metadata:
+                    self.logger.info(f"No metadata from OpenAlex, trying Semantic Scholar for {paper_id}")
+                    metadata = self._get_semantic_scholar_metadata(paper_id)
+                return metadata
             else:
+                self.logger.warning(f"Unknown metadata source: {source}")
                 return None
         except Exception as e:
             self.logger.error(f"Failed to get metadata for {paper_id}: {e}")
@@ -387,23 +425,26 @@ class CitationDataExtractor:
             
             work = response.json()
             
+            # Handle missing abstracts with fallback
+            abstract = work.get('abstract')
+            if not abstract or abstract.strip() == '':
+                concepts = [concept.get('display_name', '') for concept in work.get('concepts', [])[:3]]
+                abstract = f"[Abstract not available] Research about {', '.join(concepts) if concepts else 'scientific topics'}."
+            
             metadata = {
                 'id': work.get('id', ''),
                 'title': work.get('title', ''),
                 'publication_year': work.get('publication_year'),
                 'cited_by_count': work.get('cited_by_count', 0),
                 'authors': [
-                    {
-                        'name': author.get('author', {}).get('display_name', ''),
-                        'id': author.get('author', {}).get('id', ''),
-                        'institution': author.get('institutions', [{}])[0].get('display_name', '') if author.get('institutions') else ''
-                    }
+                    author.get('author', {}).get('display_name', '') 
                     for author in work.get('authorships', [])
+                    if author.get('author', {}).get('display_name', '')
                 ],
                 'venue': work.get('primary_location', {}).get('source', {}).get('display_name', ''),
                 'doi': work.get('doi'),
                 'url': work.get('id', ''),
-                'abstract': work.get('abstract'),
+                'abstract': abstract,
                 'concepts': [
                     {
                         'name': concept.get('display_name', ''),
@@ -452,6 +493,12 @@ class CitationDataExtractor:
             papers = []
             
             for work in data.get('results', []):
+                # Handle missing abstracts with fallback
+                abstract = work.get('abstract')
+                if not abstract or abstract.strip() == '':
+                    concepts = [concept.get('display_name', '') for concept in work.get('concepts', [])[:3]]
+                    abstract = f"[Abstract not available] Research about {', '.join(concepts) if concepts else 'scientific topics'}."
+                
                 paper = {
                     'id': work.get('id', ''),
                     'title': work.get('title', ''),
@@ -465,7 +512,7 @@ class CitationDataExtractor:
                     'venue': work.get('primary_location', {}).get('source', {}).get('display_name', ''),
                     'doi': work.get('doi'),
                     'url': work.get('id', ''),
-                    'abstract': work.get('abstract'),
+                    'abstract': abstract,
                     'concepts': [
                         concept.get('display_name', '') 
                         for concept in work.get('concepts', [])[:3]

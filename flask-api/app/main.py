@@ -19,7 +19,6 @@ from werkzeug.utils import secure_filename
 
 # Web scraping imports
 import requests
-from bs4 import BeautifulSoup
 import urllib.parse
 
 # PDF processing imports
@@ -1262,214 +1261,6 @@ class OpenAlexSearcher:
             return "Abstract processing error"
 
 
-class GoogleScholarSearcher:
-    """Search Google Scholar using web scraping with better bot detection avoidance"""
-    
-    def __init__(self):
-        self.logger = logger
-        self.last_request_time = 0
-        self.min_delay = 3  # Minimum 3 seconds between requests
-        self.session = requests.Session()
-        self.consecutive_failures = 0
-        self.max_failures = 3  # Disable after 3 consecutive failures
-        
-        # Rotate through different realistic headers
-        self.headers_list = [
-            {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-            },
-            {
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Connection': 'keep-alive',
-            }
-        ]
-    
-    def search(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
-        """Search Google Scholar with improved bot detection avoidance"""
-        try:
-            # Rate limiting - wait if needed
-            current_time = time.time()
-            elapsed = current_time - self.last_request_time
-            if elapsed < self.min_delay:
-                wait_time = self.min_delay - elapsed
-                self.logger.info(f"Waiting {wait_time:.1f}s for Google Scholar rate limiting...")
-                time.sleep(wait_time)
-            
-            # Use rotating headers
-            headers = self.headers_list[int(time.time()) % len(self.headers_list)]
-            
-            # Build search URL with additional parameters to look more natural
-            params = {
-                'q': query,
-                'num': min(max_results, 20),  # Google Scholar max per page
-                'start': 0,
-                'hl': 'en'
-            }
-            
-            search_url = "https://scholar.google.com/scholar?" + urllib.parse.urlencode(params)
-            self.logger.info(f"Searching Google Scholar: {query[:50]}...")
-            
-            response = self.session.get(
-                search_url, 
-                headers=headers, 
-                timeout=config.REQUEST_TIMEOUT,
-                allow_redirects=True
-            )
-            
-            self.last_request_time = time.time()
-            
-            # Handle different response codes
-            if response.status_code == 429:
-                self.consecutive_failures += 1
-                self.logger.warning(f"Google Scholar rate limit (429) - try again later (failure {self.consecutive_failures})")
-                if self.consecutive_failures >= self.max_failures:
-                    self.logger.error("Google Scholar repeatedly failing - consider using only OpenAlex")
-                return []
-            elif response.status_code == 403:
-                self.consecutive_failures += 1
-                self.logger.warning(f"Google Scholar blocked request (403) - possible bot detection (failure {self.consecutive_failures})")
-                return []
-            elif response.status_code != 200:
-                self.consecutive_failures += 1
-                self.logger.warning(f"Google Scholar returned status {response.status_code} (failure {self.consecutive_failures})")
-                return []
-            
-            # Check for CAPTCHA or block page
-            if "captcha" in response.text.lower() or "unusual traffic" in response.text.lower():
-                self.logger.warning("Google Scholar detected unusual traffic - CAPTCHA required")
-                return []
-            
-            soup = BeautifulSoup(response.content, 'html.parser')
-            papers = []
-            
-            # Try multiple selectors as Google Scholar changes their classes
-            result_selectors = [
-                'div.gs_r.gs_or.gs_scl',  # Current format
-                'div[data-lid]',          # Alternative format
-                'div.gs_ri'               # Older format
-            ]
-            
-            results = []
-            for selector in result_selectors:
-                results = soup.select(selector)
-                if results:
-                    break
-            
-            if not results:
-                self.logger.warning("No results found - Google Scholar may have changed structure")
-                return []
-            
-            for result in results[:max_results]:
-                try:
-                    paper = self._parse_scholar_result(result)
-                    if paper:
-                        papers.append(paper)
-                except Exception as e:
-                    self.logger.warning(f"Failed to parse Google Scholar result: {e}")
-                    continue
-            
-            self.logger.info(f"Found {len(papers)} papers from Google Scholar")
-            
-            # Reset failure count on success
-            if papers:
-                self.consecutive_failures = 0
-            
-            return papers
-            
-        except requests.exceptions.Timeout:
-            self.logger.error("Google Scholar request timed out")
-            return []
-        except requests.exceptions.ConnectionError:
-            self.logger.error("Failed to connect to Google Scholar")
-            return []
-        except Exception as e:
-            self.logger.error(f"Google Scholar search failed: {e}")
-            return []
-    
-    def _parse_scholar_result(self, result) -> Optional[Dict[str, Any]]:
-        """Parse individual Google Scholar search result with multiple format support"""
-        try:
-            # Try multiple title selectors
-            title_elem = None
-            title_selectors = ['h3.gs_rt', 'h3', '.gs_rt', '[data-lid] h3']
-            
-            for selector in title_selectors:
-                title_elem = result.select_one(selector)
-                if title_elem:
-                    break
-            
-            if not title_elem:
-                return None
-            
-            # Clean title text
-            title = title_elem.get_text(strip=True)
-            
-            # Remove citation markers like [PDF], [HTML], etc.
-            title = re.sub(r'\[PDF\]|\[HTML\]|\[CITATION\]', '', title).strip()
-            
-            if not title or len(title) < 10:  # Skip if title too short
-                return None
-            
-            # Extract authors and publication info
-            authors = []
-            authors_elem = result.select_one('.gs_a')
-            if authors_elem:
-                authors_text = authors_elem.get_text()
-                # Authors are usually before the first dash
-                author_part = authors_text.split('-')[0] if '-' in authors_text else authors_text
-                authors = [author.strip() for author in author_part.split(',')[:5] if author.strip()]
-            
-            # Extract summary/snippet
-            summary = "No summary available"
-            summary_selectors = ['.gs_rs', '.gs_ri .gs_fl', '.gs_ri']
-            
-            for selector in summary_selectors:
-                summary_elem = result.select_one(selector)
-                if summary_elem:
-                    summary = summary_elem.get_text(strip=True)
-                    if len(summary) > 20:  # Only use if substantial content
-                        break
-            
-            # Extract URL
-            url = ""
-            link_elem = title_elem.find('a')
-            if link_elem and link_elem.get('href'):
-                url = link_elem.get('href')
-                # Handle relative URLs
-                if url.startswith('/'):
-                    url = 'https://scholar.google.com' + url
-            
-            # Extract year if available
-            year = ""
-            if authors_elem:
-                year_match = re.search(r'\b(19|20)\d{2}\b', authors_elem.get_text())
-                if year_match:
-                    year = year_match.group()
-            
-            return {
-                "id": str(uuid.uuid4()),
-                "title": title,
-                "authors": authors,
-                "summary": summary[:500],  # Limit summary length
-                "url": url,
-                "pdf_url": url,
-                "published": year,
-                "source": "Google Scholar"
-            }
-            
-        except Exception as e:
-            self.logger.debug(f"Error parsing Google Scholar result: {e}")
-            return None
-
-
 class RelevanceScorer:
     """Score paper relevance using AI analysis"""
     
@@ -1706,7 +1497,6 @@ class AcademicPaperDiscoveryEngine:
         # Initialize traditional components
         self.research_extractor = ResearchFocusExtractor(openai_client)
         self.openalex_searcher = OpenAlexSearcher()  # Using only OpenAlex
-        self.scholar_searcher = GoogleScholarSearcher()
         self.relevance_scorer = RelevanceScorer(openai_client)
         self.duplicate_remover = DuplicateRemover(config.DUPLICATE_THRESHOLD)
         self.pdf_analyzer = PDFAnalyzer(self.research_extractor)
@@ -2172,8 +1962,10 @@ def discover_papers_endpoint():
         
         sources = data.get('sources', ["openalex"])
         max_results = min(data.get('max_results', 10), config.MAX_ALLOWED_RESULTS)
+        session_id = data.get('session_id')  # Get session_id from request body
         
         logger.info(f"📝 Received discovery request: {research_input[:100]}...")
+        logger.info(f"📋 Session ID: {session_id}")
         
         # 🔍 NEW: Check cache first before making API calls
         cached_result = cache_manager.get_cached_search_results(research_input, sources, max_results)
@@ -2226,8 +2018,10 @@ def discover_papers_endpoint():
             
             # Cache the results for future requests
             try:
-                cache_manager.cache_search_results(research_input, sources, max_results, result, user_id)
-                logger.info(f"✅ Cached search results for query: {research_input[:50]}...")
+                # Use session_id for caching (fallback to user_id if session_id not provided)
+                cache_id = session_id or user_id
+                cache_manager.cache_search_results(research_input, sources, max_results, result, cache_id)
+                logger.info(f"✅ Cached search results for query: {research_input[:50]}... (cache_id: {cache_id})")
             except Exception as e:
                 logger.warning(f"Failed to cache search results: {e}")
         
@@ -3383,7 +3177,7 @@ def get_enhanced_features_info():
         }), 500
 
 
-# 🧠 VECTOR DATABASE API ENDPOINTS
+# �🧠 VECTOR DATABASE API ENDPOINTS
 
 @app.route('/api/vector-db/stats', methods=['GET'])
 def vector_database_stats():

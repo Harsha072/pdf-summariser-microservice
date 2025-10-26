@@ -9,42 +9,42 @@ const AuthDemo = () => {
   const demoFeatures = [
     {
       id: 'search',
-      title: '🔍 Search Papers',
+      title: 'Search Papers',
       description: 'Browse and search academic papers from multiple sources',
       access: 'free',
       status: 'Available to everyone'
     },
     {
       id: 'view-basic',
-      title: '👀 View Basic Info',
+      title: 'View Basic Info',
       description: 'See paper title, authors, summary, and source',
       access: 'free',
       status: 'Available to everyone'
     },
     {
       id: 'download',
-      title: '📥 Download Papers',
+      title: 'Download Papers',
       description: 'Download PDF files of research papers',
       access: 'premium',
       status: 'Requires sign in'
     },
     {
       id: 'analysis',
-      title: '🤖 AI Analysis',
+      title: 'AI Analysis',
       description: 'Get detailed AI-powered analysis and insights',
       access: 'premium',
       status: 'Requires sign in'
     },
     {
       id: 'history',
-      title: '📚 Search History',
+      title: 'Search History',
       description: 'Access your personal search history across sessions',
       access: 'premium',
       status: 'Requires sign in'
     },
     {
       id: 'favorites',
-      title: '⭐ Save Favorites',
+      title: 'Save Favorites',
       description: 'Save and organize your favorite papers',
       access: 'premium',
       status: 'Coming soon - Requires sign in'
@@ -58,7 +58,7 @@ const AuthDemo = () => {
   return (
     <div className="auth-demo">
       <div className="demo-header">
-        <h2>🔐 Authorization Features Demo</h2>
+        <h2>Authorization Features Demo</h2>
         <p className="demo-subtitle">
           Academic Paper Discovery Engine offers both free and premium features. 
           See what's available to you based on your account status.
@@ -67,7 +67,7 @@ const AuthDemo = () => {
         <div className="current-status">
           {isAuthenticated ? (
             <div className="status-card authenticated">
-              <div className="status-icon">✅</div>
+              <div className="status-icon"></div>
               <div className="status-info">
                 <strong>Signed In</strong>
                 <p>Welcome {user?.displayName || user?.email}! You have access to all features.</p>
@@ -75,7 +75,7 @@ const AuthDemo = () => {
             </div>
           ) : (
             <div className="status-card guest">
-              <div className="status-icon">👤</div>
+              <div className="status-icon"></div>
               <div className="status-info">
                 <strong>Guest User</strong>
                 <p>You have free access to search and browse. Sign in for premium features.</p>
@@ -94,7 +94,7 @@ const AuthDemo = () => {
             <div className="feature-header">
               <h3>{feature.title}</h3>
               <div className={`access-badge ${feature.access}`}>
-                {feature.access === 'free' ? '🔓 Free' : '🔒 Premium'}
+                {feature.access === 'free' ? 'Free' : 'Premium'}
               </div>
             </div>
             
@@ -112,7 +112,7 @@ const AuthDemo = () => {
                   className="demo-button available"
                   onClick={() => handleProtectedAction(feature.title)}
                 >
-                  ✅ Try Now
+                  Try Now
                 </button>
               ) : (
                 <ProtectedButton
@@ -120,7 +120,7 @@ const AuthDemo = () => {
                   onClick={() => handleProtectedAction(feature.title)}
                   feature={feature.title.toLowerCase()}
                 >
-                  {isAuthenticated ? '✅ Try Now' : '🔒 Sign In Required'}
+                  {isAuthenticated ? 'Try Now' : 'Sign In Required'}
                 </ProtectedButton>
               )}
             </div>
@@ -129,7 +129,7 @@ const AuthDemo = () => {
       </div>
 
       <div className="auth-examples">
-        <h3>🧪 Interactive Examples</h3>
+        <h3>Interactive Examples</h3>
         <div className="examples-grid">
           
           <div className="example-card">
@@ -140,7 +140,7 @@ const AuthDemo = () => {
               onClick={() => alert('Success! You are authenticated.')}
               feature="access this demo feature"
             >
-              🔒 Download Sample Paper
+              Download Sample Paper
             </ProtectedButton>
           </div>
 
@@ -156,7 +156,7 @@ const AuthDemo = () => {
               }}
               feature="access premium content"
             >
-              🔗 View Detailed Analysis
+              View Detailed Analysis
             </ProtectedLink>
           </div>
 
@@ -170,7 +170,7 @@ const AuthDemo = () => {
             >
               <div className="protected-content">
                 <div className="premium-feature">
-                  <h5>🎉 Premium Content</h5>
+                  <h5>Premium Content</h5>
                   <p>This is exclusive content only available to signed-in users!</p>
                   <ul>
                     <li>Advanced search filters</li>
@@ -186,25 +186,25 @@ const AuthDemo = () => {
       </div>
 
       <div className="benefits-section">
-        <h3>🌟 Why Sign In?</h3>
+        <h3>Why Sign In?</h3>
         <div className="benefits-grid">
           <div className="benefit-item">
-            <div className="benefit-icon">📥</div>
+            <div className="benefit-icon"></div>
             <h4>Download Papers</h4>
             <p>Download PDF files directly to your device for offline reading</p>
           </div>
           <div className="benefit-item">
-            <div className="benefit-icon">🤖</div>
+            <div className="benefit-icon"></div>
             <h4>AI Analysis</h4>
             <p>Get detailed AI-powered insights, summaries, and analysis</p>
           </div>
           <div className="benefit-item">
-            <div className="benefit-icon">📚</div>
+            <div className="benefit-icon"></div>
             <h4>Search History</h4>
             <p>Access your search history across devices and sessions</p>
           </div>
           <div className="benefit-item">
-            <div className="benefit-icon">🔄</div>
+            <div className="benefit-icon"></div>
             <h4>Sync Across Devices</h4>
             <p>Your preferences and history sync across all your devices</p>
           </div>

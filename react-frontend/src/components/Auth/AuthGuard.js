@@ -34,17 +34,17 @@ const AuthGuard = ({
       return (
         <div className="auth-guard-prompt">
           <div className="auth-prompt-card">
-            <div className="auth-prompt-icon">🔒</div>
+            <div className="auth-prompt-icon"></div>
             <h3>Sign In Required</h3>
             <p>You need to sign in to access {feature}.</p>
             <div className="auth-prompt-benefits">
               <h4>With an account, you can:</h4>
               <ul>
-                <li>📥 Download papers and PDFs</li>
-                <li>📊 View detailed paper analysis</li>
-                <li>🔍 Access your search history</li>
-                <li>⭐ Save favorite papers</li>
-                <li>🔄 Sync across devices</li>
+                <li>Download papers and PDFs</li>
+                <li>View detailed paper analysis</li>
+                <li>Access your search history</li>
+                <li>Save favorite papers</li>
+                <li>Sync across devices</li>
               </ul>
             </div>
             <button 
@@ -83,7 +83,7 @@ const AuthGuard = ({
         {!showLoginModal && (
           <div className="auth-required-overlay">
             <div className="auth-required-message">
-              <div className="auth-icon">🔐</div>
+              <div className="auth-icon"></div>
               <h3>Authentication Required</h3>
               <p>Please sign in to access {feature}</p>
               <button 
@@ -166,7 +166,7 @@ export const ProtectedButton = ({
         disabled={disabled || loading}
       >
         {children}
-        {!isAuthenticated && <span className="auth-lock-icon">🔒</span>}
+        {!isAuthenticated && <span className="auth-lock-icon"></span>}
       </button>
       
       {showLoginModal && (
@@ -216,7 +216,7 @@ export const ProtectedLink = ({
         onClick={handleClick}
       >
         {children}
-        {!isAuthenticated && <span className="auth-lock-icon">🔒</span>}
+        {!isAuthenticated && <span className="auth-lock-icon"></span>}
       </a>
       
       {showLoginModal && (

@@ -17,21 +17,21 @@ const SimplePaperRelationshipsPage = () => {
     // Check if we have state from the discovery page
     if (location.state?.paperId) {
       const { paperId, paperTitle: title, openalexWorkId, graphData, error } = location.state;
-      console.log('📊 Building graph from discovery page for:', paperId, title);
+      console.log('Building graph from discovery page for:', paperId, title);
       
       // Log if we received an OpenAlex work ID
       if (openalexWorkId) {
-        console.log('🔗 Received OpenAlex work ID:', openalexWorkId);
+        console.log('Received OpenAlex work ID:', openalexWorkId);
       }
       
       // Log if we received pre-fetched graph data
       if (graphData) {
-        console.log('📈 Received pre-fetched graph data:', graphData);
+        console.log('Received pre-fetched graph data:', graphData);
       }
       
       // Log if there was an error during graph building
       if (error) {
-        console.log('❌ Error from discovery page:', error);
+        console.log('Error from discovery page:', error);
       }
       
       setCurrentPaperId(paperId);
@@ -113,25 +113,11 @@ const SimplePaperRelationshipsPage = () => {
 
   return (
     <div className="paper-relationships-page">
-      <div className="page-header">
-        <h1>📊 Paper Relationship Explorer</h1>
-        <p className="page-subtitle">
-          Discover how research ideas connect - see what papers built upon each other like a family tree
-        </p>
-        
-        {/* Show paper title when coming from discovery */}
-        {paperTitle && (
-          <div className="current-paper-info">
-            <div className="current-paper-label">Building graph for:</div>
-            <div className="current-paper-title">{paperTitle}</div>
-          </div>
-        )}
-      </div>
 
       {/* Example Papers */}
       {!currentPaperId && (
         <div className="examples-section">
-          <h3>🎯 Try These Famous Papers</h3>
+          <h3>Try These Famous Papers</h3>
           <div className="example-papers">
             {examplePapers.map((paper, index) => (
               <div key={index} className="example-paper-card">
@@ -141,7 +127,7 @@ const SimplePaperRelationshipsPage = () => {
                   onClick={() => handleExamplePaper(paper.id)}
                   className="try-example-btn"
                 >
-                  🔍 Explore This Paper
+                  Explore This Paper
                 </button>
                 <div className="paper-id-display">
                   <code>{paper.id}</code>
@@ -153,10 +139,10 @@ const SimplePaperRelationshipsPage = () => {
       )}
 
       {/* Recent Papers */}
-      {recentPapers.length > 0 && (
+      {/* {recentPapers.length > 0 && (
         <div className="recent-section">
           <div className="recent-header">
-            <h4>📚 Recently Explored</h4>
+            <h4>Recently Explored</h4>
             <button onClick={clearRecentPapers} className="clear-recent-btn">
               Clear History
             </button>
@@ -173,7 +159,7 @@ const SimplePaperRelationshipsPage = () => {
             ))}
           </div>
         </div>
-      )}
+      )} */}
 
       {/* Main Content */}
       <div className="main-content">

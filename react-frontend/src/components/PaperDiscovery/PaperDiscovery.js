@@ -6,6 +6,19 @@ import { SmartPaperActions } from './ProtectedPaperFeatures';
 import { useAuth } from '../../context/AuthContext';
 import './PaperDiscovery.css';
 
+// Helper function to format authors list
+const formatAuthors = (authors, maxAuthors = 3) => {
+  if (!authors || authors.length === 0) return 'Unknown';
+  
+  if (authors.length <= maxAuthors) {
+    return authors.join(', ');
+  }
+  
+  const displayedAuthors = authors.slice(0, maxAuthors).join(', ');
+  const remainingCount = authors.length - maxAuthors;
+  return `${displayedAuthors} +${remainingCount} more`;
+};
+
 const PaperDiscovery = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -42,7 +55,7 @@ const PaperDiscovery = () => {
     const fromParam = urlParams.get('from');
     
     if (queryParam && fromParam === 'history') {
-      console.log('🔄 Repeating search from history:', queryParam);
+      console.log('Repeating search from history:', queryParam);
       setSearchQuery(queryParam);
       
       if (sourcesParam) {
@@ -67,13 +80,20 @@ const PaperDiscovery = () => {
   useEffect(() => {
     const loadCachedResults = async () => {
       try {
-        console.log("🔄 Loading cached results on page reload...")
+        console.log("PaperDiscovery: Loading cached results on page load...");
+        console.log("PaperDiscovery: Current session ID:", getCurrentSessionId());
+        
         const cachedData = await getCachedSearchResults();
-        console.log("📋 Cached data response:", cachedData);
+        console.log("PaperDiscovery: Cached data response:", cachedData);
+        
         if (cachedData.success && cachedData.has_cache) {
           if (cachedData.results && cachedData.results.length > 0) {
             // Load the most recent search results
             const mostRecent = cachedData.results[0];
+            console.log("PaperDiscovery: Loading most recent cached result");
+            console.log("PaperDiscovery: Query:", mostRecent.query);
+            console.log("PaperDiscovery: Papers count:", mostRecent.results?.papers?.length || 0);
+            
             setSearchQuery(mostRecent.query || '');
             setDiscoveredPapers(mostRecent.results?.papers || []);
             setSelectedSources(mostRecent.sources || ['openalex']);
@@ -81,13 +101,18 @@ const PaperDiscovery = () => {
             setCacheStatus(`Loaded cached results from ${new Date(mostRecent.timestamp).toLocaleTimeString()}`);
           } else if (cachedData.result) {
             // Single result format
+            console.log("PaperDiscovery: Loading single cached result");
+            console.log("PaperDiscovery: Papers count:", cachedData.result?.papers?.length || 0);
+            
             setSearchQuery(cachedData.query || '');
             setDiscoveredPapers(cachedData.result?.papers || []);
             setCacheStatus(`Loaded cached results from ${new Date(cachedData.result.timestamp).toLocaleTimeString()}`);
           }
+        } else {
+          console.log("PaperDiscovery: No cached results found");
         }
       } catch (error) {
-        console.error('Failed to load cached results:', error);
+        console.error('PaperDiscovery: Failed to load cached results:', error);
       }
     };
 
@@ -104,8 +129,11 @@ const PaperDiscovery = () => {
   };
 
   const handleBuildGraph = async (paper) => {
+    console.log('handleBuildGraph called with paper:', paper);
+    
     // Use OpenAlex work ID if available, otherwise fall back to existing logic
     let paperId = paper.openalex_work_id || paper.paper_id || paper.id;
+    console.log('Initial paperId:', paperId);
     
     // If we still don't have a work ID but have a URL, try to extract it
     if (!paperId && paper.url && paper.url.includes('openalex.org/W')) {
@@ -115,6 +143,7 @@ const PaperDiscovery = () => {
       } else {
         paperId = 'W' + paperId; // Add W prefix if missing
       }
+      console.log('Extracted paperId from URL:', paperId);
     }
     
     // Legacy fallback for other ID formats
@@ -125,15 +154,17 @@ const PaperDiscovery = () => {
       } else if (paperId && paperId.startsWith('W')) {
         paperId = paperId; // Keep as is for OpenAlex work IDs
       }
+      console.log('Fallback paperId:', paperId);
     }
     
     if (!paperId) {
+      console.error('No paper ID found!');
       alert('Unable to build graph: Paper ID not found');
       return;
     }
     
-    console.log('🔄 Building network graph for paper:', paperId, paper.title);
-    console.log('📋 Using OpenAlex work ID:', paper.openalex_work_id || 'Not available');
+    console.log('Building network graph for paper:', paperId, paper.title);
+    console.log('Using OpenAlex work ID:', paper.openalex_work_id || 'Not available');
     
     try {
       // Show loading state for this specific paper
@@ -151,27 +182,35 @@ const PaperDiscovery = () => {
           const token = await refreshToken();
           if (token) {
             headers['Authorization'] = `Bearer ${token}`;
-            console.log('✅ Firebase token obtained successfully');
+            console.log('Firebase token obtained successfully');
           }
         } catch (tokenError) {
-          console.warn('⚠️ Failed to get user token:', tokenError);
+          console.warn('Failed to get user token:', tokenError);
           // Continue without token
         }
       }
       
-      const response = await fetch(`http://localhost:5000/api/paper-relationships/${encodeURIComponent(paperId)}?max_connections=10`, {
+      const apiUrl = `http://localhost:5000/api/paper-relationships/${encodeURIComponent(paperId)}?max_connections=10`;
+      console.log('Calling API:', apiUrl);
+      
+      const response = await fetch(apiUrl, {
         method: 'GET',
         headers: headers
       });
       
+      console.log('API Response status:', response.status);
+      
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error response:', errorText);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const graphData = await response.json();
+      console.log('Graph data received:', graphData);
       
       if (graphData.success) {
-        console.log('✅ Graph data received:', graphData);
+        console.log('Graph built successfully, navigating to /paper-relationships');
         
         // Navigate to the SimplePaperRelationships page with the graph data
         navigate('/paper-relationships', { 
@@ -184,15 +223,17 @@ const PaperDiscovery = () => {
           } 
         });
       } else {
+        console.error('Graph build failed:', graphData.error);
         throw new Error(graphData.error || 'Failed to build graph');
       }
       
     } catch (error) {
-      console.error('❌ Error building graph:', error);
+      console.error('Error building graph:', error);
       setError(`Failed to build graph: ${error.message}`);
       
       // Still navigate to the page but without pre-fetched data
       // The SimplePaperRelationships component will handle the API call
+      console.log('Navigating to /paper-relationships with error state');
       navigate('/paper-relationships', { 
         state: { 
           paperId: paperId,
@@ -306,7 +347,7 @@ const PaperDiscovery = () => {
     }
   };
 
-  // 📑 BOOKMARK FUNCTIONS
+  // BOOKMARK FUNCTIONS
   const toggleBookmark = async (paper) => {
     try {
       const paperId = paper.paper_id;
@@ -355,142 +396,9 @@ const PaperDiscovery = () => {
 
   return (
     <div className="paper-discovery">
-      {/* Authorization Status Banner */}
-      {!isAuthenticated && (
-        <div className="auth-status-banner">
-          <div className="auth-banner-content">
-            <div className="auth-banner-icon">ℹ️</div>
-            <div className="auth-banner-text">
-              <strong>Free Access:</strong> You can search and browse papers freely. 
-              <span className="auth-banner-highlight"> Sign in to download papers and view detailed AI analysis.</span>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {isAuthenticated && (
-        <div className="auth-status-banner authenticated">
-          <div className="auth-banner-content">
-            <div className="auth-banner-icon">✅</div>
-            <div className="auth-banner-text">
-              <strong>Welcome back, {user?.displayName || user?.email}!</strong> 
-              You have full access to all features including downloads and detailed analysis.
-            </div>
-          </div>
-        </div>
-      )}
-      
       <div className="discovery-controls">
-        <div className="search-section">
-          <div className="search-header">
-            <h3>Discover Academic Papers</h3>
-            <p className="search-subtitle">Search by research topic or upload your paper to find similar work</p>
-          </div>
-          
-          <div className="search-input-group">
-            <div className="textarea-container">
-              <textarea
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Enter your complete research question, e.g., 'How can machine learning improve medical diagnosis accuracy?' or 'What are the latest advances in quantum computing for cryptography?'"
-                rows={3}
-                className="search-textarea"
-                maxLength={500}
-              />
-              
-              <div className="input-actions">
-                <input
-                  type="file"
-                  accept=".pdf"
-                  onChange={handleFileUpload}
-                  className="file-input"
-                  id="paper-upload"
-                />
-                <label htmlFor="paper-upload" className="file-upload-btn" title="Upload PDF to find similar papers">
-                  📎
-                </label>
-                
-                {uploadedFile && (
-                  <div className="uploaded-file-indicator">
-                    <span className="file-name" title={uploadedFile.name}>
-                      {uploadedFile.name.length > 20 ? uploadedFile.name.substring(0, 20) + '...' : uploadedFile.name}
-                    </span>
-                    <button 
-                      onClick={() => setUploadedFile(null)} 
-                      className="remove-file-btn-small"
-                      title="Remove file"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            <button 
-              onClick={handleSearchByQuery}
-              disabled={isLoading}
-              className="search-button primary"
-            >
-              {isLoading ? 'Discovering...' : 'Discover Papers'}
-            </button>
-          </div>
-          
-          {/* Search Tips and Examples */}
-          <div className="search-guidance">
-            <div className="search-tips">
-              <h4>💡 Search Tips:</h4>
-              <ul>
-                <li>Use <strong>complete research questions</strong> for better results</li>
-                <li>Include <strong>specific domains</strong>: "machine learning in healthcare"</li>
-                <li>Mention <strong>methodologies</strong>: "using deep neural networks"</li>
-                <li>Be specific about <strong>applications</strong>: "for cancer detection"</li>
-              </ul>
-            </div>
-            
-            <div className="example-queries">
-              <h4>📝 Example Research Questions:</h4>
-              <div className="example-buttons">
-                {[
-                  "How can AI improve cancer diagnosis accuracy?",
-                  "What are the latest advances in quantum machine learning?",
-                  "How effective is deep learning for natural language processing?",
-                  "What are the ethical implications of AI in healthcare?"
-                ].map((example, index) => (
-                  <button 
-                    key={index}
-                    onClick={() => setSearchQuery(example)}
-                    className="example-button"
-                    type="button"
-                  >
-                    {example}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
 
         <div className="options-section">
-          <div className="sources-selection">
-            <h4>Search Sources</h4>
-            <div className="sources-grid">
-              {availableSources.map(source => (
-                <label key={source.id} className="source-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={selectedSources.includes(source.id)}
-                    onChange={() => handleSourceToggle(source.id)}
-                  />
-                  <div className="source-content">
-                    <span className="source-name">{source.name}</span>
-                    <span className="source-description">{source.description}</span>
-                  </div>
-                </label>
-              ))}
-            </div>
-          </div>
-
           <div className="max-results">
             <label>
               Max Results:
@@ -520,11 +428,11 @@ const PaperDiscovery = () => {
       {discoveredPapers.length > 0 && (
         <div className="results-section">
           <div className="results-header">
-            <h3>📚 Discovered Papers ({discoveredPapers.length})</h3>
+            <h3>Discovered Papers ({discoveredPapers.length})</h3>
             <div className="results-actions">
               {cacheStatus && (
                 <div className="cache-status">
-                  <span className="cache-indicator">🔄 {cacheStatus}</span>
+                  <span className="cache-indicator">{cacheStatus}</span>
                 </div>
               )}
               <button
@@ -545,7 +453,7 @@ const PaperDiscovery = () => {
           {!isAuthenticated && discoveredPapers.length > 0 && (
             <div className="results-auth-info">
               <div className="auth-info-content">
-                <span className="auth-info-icon">🔓</span>
+                <span className="auth-info-icon">i</span>
                 <span className="auth-info-text">
                   You can browse all papers freely. Sign in to unlock downloads and detailed analysis.
                 </span>
@@ -559,7 +467,6 @@ const PaperDiscovery = () => {
                   <h4 className="paper-title">{paper.title}</h4>
                   <div className="paper-header-actions">
                     <div className="paper-meta">
-                      <span className="paper-source">{paper.source}</span>
                       {paper.relevance_score && (
                         <span className="relevance-score">
                           Relevance: {Math.round(paper.relevance_score)}%
@@ -589,25 +496,15 @@ const PaperDiscovery = () => {
                 </div>
 
                 <div className="paper-authors">
-                  <strong>Authors:</strong> {paper.authors?.join(', ') || 'Unknown'}
-                </div>
-
-                <div className="paper-summary">
-                  {paper.summary && paper.summary.length > 300 
-                    ? paper.summary.substring(0, 300) + '...'
-                    : paper.summary || 'No summary available'
-                  }
+                  <strong>Authors:</strong> {formatAuthors(paper.authors, 3)}
                 </div>
 
                 <div className="paper-details">
                   {paper.published && (
-                    <span className="paper-date">Published: {paper.published}</span>
+                    <span className="paper-date"><strong>Published:</strong> {paper.published}</span>
                   )}
-                  {paper.citation_count && (
-                    <span className="citation-count">Citations: {paper.citation_count}</span>
-                  )}
-                  {paper.journal && (
-                    <span className="journal">Journal: {paper.journal}</span>
+                  {paper.citation_count !== undefined && paper.citation_count !== null && (
+                    <span className="citation-count"><strong>Citations:</strong> {paper.citation_count}</span>
                   )}
                 </div>
 
@@ -629,7 +526,7 @@ const PaperDiscovery = () => {
       {searchQuery && !isLoading && discoveredPapers.length === 0 && !error && (
         <div className="no-results-section">
           <div className="no-results-content">
-            <div className="no-results-icon">📋</div>
+            <div className="no-results-icon">!</div>
             <h3>No Papers Found</h3>
             <p>We couldn't find any papers matching your research question.</p>
             <div className="no-results-suggestions">

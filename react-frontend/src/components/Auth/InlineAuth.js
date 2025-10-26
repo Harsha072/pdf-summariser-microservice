@@ -44,7 +44,7 @@ const InlineAuthPrompt = ({
     return (
       <div className="inline-auth-compact">
         <div className="auth-compact-content">
-          <span className="auth-lock">🔒</span>
+          <span className="auth-lock"></span>
           <span className="auth-message">Sign in to {feature}</span>
           <div className="auth-compact-buttons">
             <button 
@@ -73,16 +73,16 @@ const InlineAuthPrompt = ({
   return (
     <div className="inline-auth-prompt">
       <div className="auth-prompt-content">
-        <div className="auth-icon-large">🔐</div>
+        <div className="auth-icon-large"></div>
         <h3>Sign in required</h3>
         <p>You need to sign in to {feature}</p>
         
         {showBenefits && (
           <div className="auth-benefits-mini">
-            <div className="benefit-item">✅ Download papers and PDFs</div>
-            <div className="benefit-item">✅ View detailed AI analysis</div>
-            <div className="benefit-item">✅ Access search history</div>
-            <div className="benefit-item">✅ Save favorite papers</div>
+            <div className="benefit-item">Download papers and PDFs</div>
+            <div className="benefit-item">View detailed AI analysis</div>
+            <div className="benefit-item">Access search history</div>
+            <div className="benefit-item">Save favorite papers</div>
           </div>
         )}
 
@@ -109,7 +109,7 @@ const InlineAuthPrompt = ({
         {error && <div className="auth-error">{error}</div>}
         
         <div className="auth-privacy">
-          <small>🔒 Your data is secure. We only store your basic profile information.</small>
+          <small>Your data is secure. We only store your basic profile information.</small>
         </div>
       </div>
     </div>
@@ -233,7 +233,7 @@ export const AuthButton = ({
       disabled={disabled || loading}
     >
       {children}
-      {!isAuthenticated && <span className="auth-indicator">🔒</span>}
+      {!isAuthenticated && <span className="auth-indicator"></span>}
     </button>
   );
 };

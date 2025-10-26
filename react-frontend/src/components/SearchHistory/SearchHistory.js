@@ -120,7 +120,7 @@ const SearchHistory = () => {
       <div className="history-header">
         <div className="header-content">
           <h2>
-            <span className="icon">📚</span>
+            <span className="icon"></span>
             Search History
           </h2>
           <p className="subtitle">
@@ -137,14 +137,14 @@ const SearchHistory = () => {
             className="clear-all-btn"
             title="Clear all history"
           >
-            🗑️ Clear All
+            Clear All
           </button>
         )}
       </div>
 
       {error && (
         <div className="error-message">
-          <span className="error-icon">⚠️</span>
+          <span className="error-icon"></span>
           {error}
         </div>
       )}
@@ -152,7 +152,7 @@ const SearchHistory = () => {
       {!isAuthenticated && (
         <div className="auth-notice">
           <div className="notice-content">
-            <span className="notice-icon">💡</span>
+            <span className="notice-icon"></span>
             <div className="notice-text">
               <strong>Limited History:</strong> Anonymous users see recent session history only.
               <br />
@@ -166,7 +166,7 @@ const SearchHistory = () => {
 
       {history.length === 0 ? (
         <div className="empty-history">
-          <div className="empty-icon">🔍</div>
+          <div className="empty-icon"></div>
           <h3>No search history yet</h3>
           <p>
             {isAuthenticated 
@@ -193,18 +193,18 @@ const SearchHistory = () => {
                 <div className="search-meta">
                   <div className="meta-row">
                     <span className="meta-item">
-                      <span className="meta-icon">📅</span>
+                      <span className="meta-icon"></span>
                       {formatDate(searchItem.timestamp)}
                     </span>
                     <span className="meta-item">
-                      <span className="meta-icon">📄</span>
+                      <span className="meta-icon"></span>
                       {searchItem.results_count} results
                     </span>
                   </div>
                   
                   <div className="meta-row">
                     <span className="meta-item sources">
-                      <span className="meta-icon">🔗</span>
+                      <span className="meta-icon"></span>
                       {formatSources(searchItem.sources)}
                     </span>
                   </div>
@@ -217,7 +217,7 @@ const SearchHistory = () => {
                   className="action-btn repeat-btn"
                   title="Repeat this search"
                 >
-                  🔄 Repeat
+                  Repeat
                 </button>
               </div>
             </div>

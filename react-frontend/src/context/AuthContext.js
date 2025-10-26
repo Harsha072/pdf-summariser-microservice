@@ -91,13 +91,13 @@ export const AuthProvider = ({ children }) => {
             providerId: user.providerData[0]?.providerId || 'anonymous'
           });
 
-          console.log(`🔐 User authenticated: ${user.email || 'Anonymous'}`);
+          console.log(`User authenticated: ${user.email || 'Anonymous'}`);
         } else {
           // Clear state and storage
           setUser(null);
           localStorage.removeItem('firebase_token');
           localStorage.removeItem('user_id');
-          console.log('🔓 User signed out');
+          console.log('User signed out');
         }
       } catch (error) {
         console.error('Auth state change error:', error);
