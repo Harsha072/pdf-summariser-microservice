@@ -437,72 +437,121 @@ const SimpleVisualization = ({ data, onNodeClick, connections }) => {
 
   return (
     <div className="simple-visualization">
-      <svg width="1200" height="900" viewBox="0 0 1200 900">
-        {/* Connection Lines with curved paths */}
-        {links && links.map((link, index) => {
-          const sourceNode = nodes.find(n => n.id === link.source);
-          const targetNode = nodes.find(n => n.id === link.target);
-          
-          if (!sourceNode || !targetNode) return null;
-          
-          const sourcePos = getNodePosition(sourceNode, nodes.indexOf(sourceNode));
-          const targetPos = getNodePosition(targetNode, nodes.indexOf(targetNode));
-          
-          // Use curved path instead of straight line
-          const pathD = getConnectionPath(sourcePos, targetPos);
-          
-          return (
-            <path
-              key={index}
-              d={pathD}
-              stroke={link.type === 'influences' ? '#4ecdc4' : link.type === 'related' ? '#a29bfe' : '#45b7d1'}
-              strokeWidth="2"
-              fill="none"
-              opacity="0.5"
-              strokeDasharray={link.type === 'related' ? '5,5' : 'none'}  // Dashed for similarity
-            />
-          );
-        })}
-        
-        {/* Paper Nodes */}
-        {nodes.map((node, index) => {
-          const pos = getNodePosition(node, index);
-          
-          return (
-            <g 
-              key={node.id}
-              onMouseEnter={(e) => handleNodeHover(node, e)}
-              onMouseLeave={handleNodeLeave}
-            >
-              <circle
-                cx={pos.x}
-                cy={pos.y}
-                r={node.size || 18}
-                fill={getNodeColor(node)}
-                stroke="#fff"
-                strokeWidth="3"
-                onClick={() => onNodeClick && onNodeClick(node)}
-                style={{ cursor: 'pointer' }}
-                opacity="0.9"
+      <div className="viz-container">
+        <svg width="1000" height="900" viewBox="0 0 1000 900">
+          {/* Connection Lines with curved paths */}
+          {links && links.map((link, index) => {
+            const sourceNode = nodes.find(n => n.id === link.source);
+            const targetNode = nodes.find(n => n.id === link.target);
+            
+            if (!sourceNode || !targetNode) return null;
+            
+            const sourcePos = getNodePosition(sourceNode, nodes.indexOf(sourceNode));
+            const targetPos = getNodePosition(targetNode, nodes.indexOf(targetNode));
+            
+            // Use curved path instead of straight line
+            const pathD = getConnectionPath(sourcePos, targetPos);
+            
+            return (
+              <path
+                key={index}
+                d={pathD}
+                stroke={link.type === 'influences' ? '#4ecdc4' : link.type === 'related' ? '#a29bfe' : '#45b7d1'}
+                strokeWidth="2"
+                fill="none"
+                opacity="0.5"
+                strokeDasharray={link.type === 'related' ? '5,5' : 'none'}  // Dashed for similarity
               />
-              {/* Smart label positioning based on node position relative to center */}
-              <text
-                x={pos.x}
-                y={pos.y < centerY ? pos.y - (node.size || 18) - 8 : pos.y + (node.size || 18) + 18}
-                textAnchor="middle"
-                fontSize="11"
-                fill="#333"
-                fontWeight="500"
-                className="node-label"
-                style={{ pointerEvents: 'none' }}
+            );
+          })}
+          
+          {/* Paper Nodes */}
+          {nodes.map((node, index) => {
+            const pos = getNodePosition(node, index);
+            
+            return (
+              <g 
+                key={node.id}
+                onMouseEnter={(e) => handleNodeHover(node, e)}
+                onMouseLeave={handleNodeLeave}
               >
-                {node.title && node.title.length > 25 ? node.title.slice(0, 25) + '...' : node.title}  
-              </text>
-            </g>
-          );
-        })}
-      </svg>
+                <circle
+                  cx={pos.x}
+                  cy={pos.y}
+                  r={node.size || 18}
+                  fill={getNodeColor(node)}
+                  stroke="#fff"
+                  strokeWidth="3"
+                  onClick={() => onNodeClick && onNodeClick(node)}
+                  style={{ cursor: 'pointer' }}
+                  opacity="0.9"
+                />
+                {/* Smart label positioning based on node position relative to center */}
+                <text
+                  x={pos.x}
+                  y={pos.y < centerY ? pos.y - (node.size || 18) - 8 : pos.y + (node.size || 18) + 18}
+                  textAnchor="middle"
+                  fontSize="11"
+                  fill="#333"
+                  fontWeight="500"
+                  className="node-label"
+                  style={{ pointerEvents: 'none' }}
+                >
+                  {node.title && node.title.length > 25 ? node.title.slice(0, 25) + '...' : node.title}  
+                </text>
+              </g>
+            );
+          })}
+        </svg>
 
+        {/* Vertical Legend on the Right */}
+        <div className="viz-legend">
+          <h3 className="legend-title">Legend</h3>
+          <div className="legend-item">
+            <div 
+              className="legend-color" 
+              style={{ backgroundColor: '#4CAF50' }}
+            ></div>
+             <div className="legend-text">
+               <span>Selected Paper</span>
+
+             </div>
+            </div>
+          <div className="legend-item">
+            <div 
+              className="legend-color" 
+              style={{ backgroundColor: '#2196F3' }}
+            ></div>
+            <div className="legend-text">
+              
+              <span>Foundation Papers</span>
+              <span className="legend-desc">(What this paper built upon)</span>
+            </div>
+          </div>
+          <div className="legend-item">
+            <div 
+              className="legend-color" 
+              style={{ backgroundColor: '#FF9800' }}
+            ></div>
+            <div className="legend-text">
+              {/* <span className="legend-symbol">▼</span> */}
+              <span>Building Papers</span>
+              <span className="legend-desc">(What built upon this paper)</span>
+            </div>
+          </div>
+          <div className="legend-item">
+            <div 
+              className="legend-color" 
+              style={{ backgroundColor: '#a29bfe' }}
+            ></div>
+            <div className="legend-text">
+              <span>Similar Papers</span>
+              <span className="legend-desc">(Topic-related research)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
       {/* Comic-style Tooltip */}
       {hoveredNode && (
         <div 
@@ -562,38 +611,6 @@ const SimpleVisualization = ({ data, onNodeClick, connections }) => {
           </div>
         </div>
       )}
-      
-      {/* Color-coded Legend */}
-      <div className="viz-legend">
-        <div className="legend-item">
-          <div 
-            className="legend-color" 
-            style={{ backgroundColor: '#4CAF50' }}
-          ></div>
-          <span>● Selected Paper</span>
-        </div>
-        <div className="legend-item">
-          <div 
-            className="legend-color" 
-            style={{ backgroundColor: '#2196F3' }}
-          ></div>
-          <span>▲ Foundation Papers (What this paper built upon)</span>
-        </div>
-        <div className="legend-item">
-          <div 
-            className="legend-color" 
-            style={{ backgroundColor: '#FF9800' }}
-          ></div>
-          <span>▼ Building Papers (What built upon this paper)</span>
-        </div>
-        <div className="legend-item">
-          <div 
-            className="legend-color" 
-            style={{ backgroundColor: '#a29bfe' }}
-          ></div>
-          <span>Similar Papers (Topic-related research)</span>
-        </div>
-      </div>
       
       <div className="viz-explanation">
         <p><strong>Interactive Family Tree:</strong> Your selected paper is in the center with related papers connected around it. Click on any node to explore that paper's relationships!</p>

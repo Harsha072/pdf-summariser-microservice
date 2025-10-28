@@ -9,13 +9,20 @@ python-dotenv
 PyMuPDF
 
 # Web Scraping for Paper Discovery
-arxiv
 requests
-beautifulsoup4
 
 # Text Processing and Similarity
 fuzzywuzzy
 python-levenshtein
+
+# Vector Database and ML
+faiss-cpu
+sentence-transformers
+scikit-learn
+numpy
+
+# Firebase
+firebase-admin
 
 # Caching Layer
 redis

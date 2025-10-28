@@ -1,63 +1,99 @@
-version: '3.8'
-
 services:
-  chroma:
-    image: chromadb/chroma
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: pdf-summariser-nginx
     ports:
-      - "8000:8000"
+      - "8080:80"
+      - "8443:443"
     volumes:
-      - chroma_data:/data
-    environment:
-      - ALLOW_RESET=TRUE
-      - CHROMA_SERVER_AUTHN_CREDENTIALS=admin:admin  # Optional auth
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro  # For SSL certificates (optional for local)
+    depends_on:
+      flask-api:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
+  # Redis cache
   redis:
-    image: redis:latest
+    image: redis:7-alpine
+    container_name: pdf-summariser-redis
     ports:
       - "6379:6379"
-
-  celery-worker:
-    build: 
-      context: ./flask-api
-      dockerfile: Dockerfile
-    command: celery -A tasks worker --loglevel=info
     volumes:
-      - ./flask-api/app:/app
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - REDIS_URL=redis://redis:6379/0
-    depends_on:
-      - redis
-      - chroma
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
+  # Flask API
   flask-api:
     build:
       context: ./flask-api
       dockerfile: Dockerfile
-    ports:
-      - "5000:5000"
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - CHROMA_SERVER_HOST=http://chroma:8000  # Connect to Chroma service
-      - REDIS_URL=redis://redis:6379/0
+    container_name: pdf-summariser-api
+    expose:
+      - "5000"
     volumes:
       - ./flask-api/app:/app
-    depends_on:
-      - chroma
-      - redis
-      - celery-worker
-
-  gradio-ui:
-    build:
-      context: ./gradio-ui
-      dockerfile: Dockerfile
-    ports:
-      - "7860:7860"
+      - ./flask-api/app/scholar-quest-firebase-adminsdk.json:/app/credentials/firebase-adminsdk.json:ro
+      - ./flask-api/app/logs:/app/logs
+      - ./flask-api/app/temp:/app/temp
+      - ./flask-api/app/data:/app/data  # For FAISS index persistence
     environment:
-      - FLASK_API_URL=http://flask-api:5000/summarize
-      - FLASK_API_URL_ASK=http://flask-api:5000/ask
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - DEBUG=${DEBUG:-false}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-3.5-turbo}
+      - OPENAI_TEMPERATURE=${OPENAI_TEMPERATURE:-0.3}
+      - OPENAI_MAX_TOKENS=${OPENAI_MAX_TOKENS:-1000}
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - ENABLE_REDIS=${ENABLE_REDIS:-true}
+      - FIREBASE_SERVICE_ACCOUNT_PATH=/app/credentials/firebase-adminsdk.json
+      - MAX_WORKERS=${MAX_WORKERS:-4}
+      - DEFAULT_MAX_RESULTS=${DEFAULT_MAX_RESULTS:-10}
+      - MAX_ALLOWED_RESULTS=${MAX_ALLOWED_RESULTS:-20}
+      - DUPLICATE_THRESHOLD=${DUPLICATE_THRESHOLD:-0.85}
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-30}
+      - MAX_UPLOAD_SIZE=${MAX_UPLOAD_SIZE:-16777216}
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
     depends_on:
-      - flask-api
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+networks:
+  app-network:
+    driver: bridge
+    name: pdf-summariser-network
 
 volumes:
-  chroma_data:  # Persistent storage for ChromaDB
+  redis_data:
+    name: pdf-summariser-redis-data
