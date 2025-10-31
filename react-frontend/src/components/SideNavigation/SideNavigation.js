@@ -70,7 +70,9 @@ const SideNavigation = () => {
   ];
 
   const handleNavigation = (path) => {
-    navigate(path);
+    if (location.pathname !== path) {
+      navigate(path);
+    }
     setIsOpen(false); // Close nav after navigation
   };
 

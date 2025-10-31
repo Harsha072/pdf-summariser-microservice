@@ -1,0 +1,116 @@
+services:
+  # Nginx reverse proxy with SSL support
+  nginx:
+    image: nginx:alpine
+    container_name: pdf-summariser-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro  # Let's Encrypt SSL certificates
+      - ./nginx/ssl:/etc/nginx/ssl:ro  # Custom SSL certificates (if any)
+    depends_on:
+      flask-api:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Flask API (connects to Redis Cloud - no local Redis needed)
+  flask-api:
+    build:
+      context: ./flask-api
+      dockerfile: Dockerfile
+    container_name: pdf-summariser-api
+    expose:
+      - "5000"
+    volumes:
+      # Mount Firebase credentials (READ ONLY)
+      - ./flask-api/app/scholar-quest-firebase-adminsdk.json:/app/credentials/firebase-adminsdk.json:ro
+      # Persistent data volumes
+      - app-logs:/app/logs
+      - app-data:/app/data  # FAISS index persistence
+      - app-temp:/app/temp
+    environment:
+      # Flask settings
+      - FLASK_ENV=production
+      - DEBUG=false
+      
+      # OpenAI
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-3.5-turbo}
+      - OPENAI_TEMPERATURE=${OPENAI_TEMPERATURE:-0.3}
+      - OPENAI_MAX_TOKENS=${OPENAI_MAX_TOKENS:-1000}
+      
+      # Redis Cloud connection (from .env.prod)
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_SSL=${REDIS_SSL:-true}
+      - REDIS_DB=${REDIS_DB:-0}
+      - ENABLE_REDIS=true
+      
+      # Firebase
+      - FIREBASE_SERVICE_ACCOUNT_PATH=/app/credentials/firebase-adminsdk.json
+      
+      # Application settings
+      - MAX_WORKERS=${MAX_WORKERS:-4}
+      - DEFAULT_MAX_RESULTS=${DEFAULT_MAX_RESULTS:-10}
+      - MAX_ALLOWED_RESULTS=${MAX_ALLOWED_RESULTS:-20}
+      - DUPLICATE_THRESHOLD=${DUPLICATE_THRESHOLD:-0.85}
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-30}
+      - MAX_UPLOAD_SIZE=${MAX_UPLOAD_SIZE:-16777216}
+      
+      # Python settings
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+    env_file:
+      - .env.prod
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+networks:
+  app-network:
+    driver: bridge
+    name: pdf-summariser-network
+
+volumes:
+  app-logs:
+    name: pdf-summariser-logs
+  app-data:
+    name: pdf-summariser-data
+  app-temp:
+    name: pdf-summariser-temp

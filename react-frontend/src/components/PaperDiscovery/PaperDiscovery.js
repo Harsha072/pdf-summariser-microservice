@@ -213,7 +213,7 @@ const PaperDiscovery = () => {
         console.log('Graph built successfully, navigating to /paper-relationships');
         
         // Navigate to the SimplePaperRelationships page with the graph data
-        navigate('/paper-relationships', { 
+        navigate(`/paper-relationships?ts=${Date.now()}`, { 
           state: { 
             paperId: paperId,
             paperTitle: paper.title,
@@ -234,7 +234,7 @@ const PaperDiscovery = () => {
       // Still navigate to the page but without pre-fetched data
       // The SimplePaperRelationships component will handle the API call
       console.log('Navigating to /paper-relationships with error state');
-      navigate('/paper-relationships', { 
+      navigate(`/paper-relationships?ts=${Date.now()}`, { 
         state: { 
           paperId: paperId,
           paperTitle: paper.title,
@@ -436,7 +436,7 @@ const PaperDiscovery = () => {
                 </div>
               )}
               <button
-                onClick={() => navigate('/paper-relationships', { 
+                onClick={() => navigate(`/paper-relationships?ts=${Date.now()}`, { 
                   state: { papers: discoveredPapers.slice(0, 5) } 
                 })}
                 className="citation-network-btn"

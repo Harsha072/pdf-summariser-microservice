@@ -1,64 +1,26 @@
 import React from 'react';
-import UserProfile from '../Auth/UserProfile';
+
 import './Header.css';
 
-const Header = ({ connectionStatus, onMenuToggle, isMenuOpen }) => {
-  const getStatusClass = () => {
-    switch (connectionStatus) {
-      case 'connected':
-        return 'status-connected';
-      case 'disconnected':
-        return 'status-disconnected';
-      default:
-        return 'status-checking';
-    }
-  };
-
-  const getStatusText = () => {
-    switch (connectionStatus) {
-      case 'connected':
-        return 'Connected';
-      case 'disconnected':
-        return 'Disconnected';
-      default:
-        return 'Checking...';
-    }
-  };
-
+const Header = () => {
   return (
-    <header className="header">
-      <div className="header-container">
-        <div className="header-content">
-          <button 
-            className="hamburger-menu"
-            onClick={onMenuToggle}
-            aria-label="Toggle navigation menu"
-            aria-expanded={isMenuOpen}
-          >
-            <div className={`hamburger-lines ${isMenuOpen ? 'open' : ''}`}>
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-          </button>
-          <div className="header-title">
-            <i className="fas fa-microscope header-icon"></i>
-            <div>
-              <h1> Academic Paper Discovery Engine</h1>
-              <div className="header-subtitle">
-                AI-Powered Research Paper Discovery & Analysis Platform
-              </div>
-            </div>
-          </div>
-          <div className="header-actions">
-            <div className="header-status">
-              <div className="status-indicator">
-                <div className={`status-dot ${getStatusClass()}`}></div>
-                <span className="status-text">{getStatusText()}</span>
-              </div>
-            </div>
-            <UserProfile />
-          </div>
+    <header className="header navbar">
+      <div className="navbar-container">
+        <div className="navbar-logo">
+          {/* Replace with your logo SVG or image if available */}
+          <span className="logo-icon">{/* ◯─◯ (placeholder for Litmaps-like icon) */}</span>
+          <span className="logo-text">Litmaps</span>
+          <span className="logo-reg">®</span>
+        </div>
+        <nav className="navbar-menu">
+          <a href="#about" className="navbar-link">About <span className="navbar-caret">▼</span></a>
+          <a href="#features" className="navbar-link">Features</a>
+          <a href="#pricing" className="navbar-link">Pricing</a>
+          <a href="#company" className="navbar-link">Company</a>
+          <a href="#blog" className="navbar-link">Blog</a>
+        </nav>
+        <div className="navbar-login">
+          <button className="login-btn">Login</button>
         </div>
       </div>
     </header>

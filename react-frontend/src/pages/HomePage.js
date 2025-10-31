@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { discoverPapers, getCurrentSessionId } from '../services/api';
 import './HomePage.css';
 
 const HomePage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
 
@@ -27,11 +28,15 @@ const HomePage = () => {
       
       // Navigate to search page - PaperDiscovery will load cached results
       console.log('HomePage: Navigating to /search');
-      navigate('/search');
+      if (location.pathname !== '/search') {
+        navigate('/search');
+      }
     } catch (error) {
       console.error('HomePage: Search failed:', error);
       // Navigate anyway to show error state
-      navigate('/search');
+      if (location.pathname !== '/search') {
+        navigate('/search');
+      }
     } finally {
       setIsSearching(false);
     }
@@ -68,8 +73,8 @@ const HomePage = () => {
       <section className="hero-section">
         <div className="hero-content">
           <h1 className="hero-title">
-            Discover the world of<br />
-            <span className="hero-highlight">Scientific Literature</span>
+            Find the Most Relevant Research Papers<br />
+            <span className="hero-highlight">for Your Questions</span>
           </h1>
           
           <div className="hero-search-container">
@@ -95,7 +100,6 @@ const HomePage = () => {
               {isSearching ? (
                 <>
                   <span className="spinner"></span>
-                  Discovering...
                 </>
               ) : (
                 <>
