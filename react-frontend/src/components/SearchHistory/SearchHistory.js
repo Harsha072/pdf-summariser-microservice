@@ -51,14 +51,15 @@ const SearchHistory = () => {
 
   const handleRepeatSearch = async (searchItem) => {
     try {
-      // Navigate back to discovery page with the search query
+      // Navigate to the search/discovery page with the search query
+      // The PaperDiscovery component will load cached results for this query
       const searchParams = new URLSearchParams({
         q: searchItem.query,
         sources: searchItem.sources.join(','),
         from: 'history'
       });
       
-      navigate(`/?${searchParams.toString()}`);
+      navigate(`/search?${searchParams.toString()}`);
     } catch (err) {
       console.error('Error repeating search:', err);
     }

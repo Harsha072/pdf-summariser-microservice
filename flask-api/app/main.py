@@ -57,7 +57,7 @@ app = Flask(__name__)
 CORS(app, 
      origins=["http://localhost:3000", "http://127.0.0.1:3000"], 
      methods=['GET', 'POST', 'OPTIONS'], 
-     allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'],
+     allow_headers=['Content-Type', 'Authorization', 'X-Requested-With', 'X-Session-ID'],
      supports_credentials=True)
 
 # Handle preflight requests manually for extra compatibility
@@ -66,7 +66,7 @@ def handle_preflight():
     if request.method == "OPTIONS":
         response = Response()
         response.headers.add("Access-Control-Allow-Origin", request.headers.get('Origin', '*'))
-        response.headers.add('Access-Control-Allow-Headers', "Content-Type,Authorization,X-Requested-With")
+        response.headers.add('Access-Control-Allow-Headers', "Content-Type,Authorization,X-Requested-With,X-Session-ID")
         response.headers.add('Access-Control-Allow-Methods', "GET,POST,OPTIONS")
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response

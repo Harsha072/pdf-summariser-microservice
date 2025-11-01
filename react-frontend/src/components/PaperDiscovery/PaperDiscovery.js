@@ -4,6 +4,7 @@ import { getCachedSearchResults, discoverPapers, getCurrentSessionId } from '../
 // import { AuthButton, ProtectedFeature } from '../Auth/InlineAuth'; // Currently unused
 import { SmartPaperActions } from './ProtectedPaperFeatures';
 import { useAuth } from '../../context/AuthContext';
+import PaperCard from '../PaperCard/PaperCard';
 import './PaperDiscovery.css';
 
 // Helper function to format authors list
@@ -63,18 +64,42 @@ const PaperDiscovery = () => {
         setSelectedSources(sources);
       }
       
-      // Trigger search automatically after setting parameters
-      setTimeout(() => {
-        const searchButton = document.querySelector('.search-button');
-        if (searchButton) {
-          searchButton.click();
-        }
-      }, 100);
+      // Load cached results for this query instead of making a new search
+      loadCachedResultsForQuery(queryParam);
       
       // Clear URL parameters
-      navigate('/', { replace: true });
+      navigate('/search', { replace: true });
     }
   }, [location.search, navigate]);
+
+  // Load cached results for a specific query
+  const loadCachedResultsForQuery = async (query) => {
+    try {
+      console.log("Loading cached results for query:", query);
+      const cachedData = await getCachedSearchResults();
+      console.log("Cached data response:", cachedData);
+      
+      if (cachedData.success && cachedData.has_cache && cachedData.results) {
+        // Find the cached result matching this query
+        const matchingResult = cachedData.results.find(
+          result => result.query.toLowerCase() === query.toLowerCase()
+        );
+        
+        if (matchingResult) {
+          console.log("Found matching cached result");
+          setDiscoveredPapers(matchingResult.results?.papers || []);
+          setSelectedSources(matchingResult.sources || ['openalex']);
+          setMaxResults(matchingResult.max_results || 10);
+          setCacheStatus(`Loaded from cache (${new Date(matchingResult.timestamp).toLocaleTimeString()})`);
+        } else {
+          console.log("No matching cache found, will need to search");
+          setCacheStatus('No cached results found for this query');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load cached results for query:', error);
+    }
+  };
 
   // Check for cached results on page load
   useEffect(() => {
@@ -358,13 +383,26 @@ const PaperDiscovery = () => {
         ? { paper_id: paperId }
         : { paper: paper };
 
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-Session-ID': getCurrentSessionId()
+      };
+
+      // Add authorization header if user is authenticated
+      if (user && refreshToken) {
+        try {
+          const token = await refreshToken();
+          if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+          }
+        } catch (tokenError) {
+          console.warn('Failed to get user token:', tokenError);
+        }
+      }
+
       const response = await fetch(`http://localhost:5000${endpoint}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Session-ID': getCurrentSessionId(),
-          ...(user && { 'Authorization': `Bearer ${await user.getIdToken()}` })
-        },
+        headers: headers,
         body: JSON.stringify(payload)
       });
 
@@ -462,61 +500,19 @@ const PaperDiscovery = () => {
           )}
           <div className="papers-grid">
             {discoveredPapers.map((paper, index) => (
-              <div key={paper.id || index} className="paper-card">
-                <div className="paper-header">
-                  <h4 className="paper-title">{paper.title}</h4>
-                  <div className="paper-header-actions">
-                    <div className="paper-meta">
-                      {paper.relevance_score && (
-                        <span className="relevance-score">
-                          Relevance: {Math.round(paper.relevance_score)}%
-                        </span>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => toggleBookmark(paper)}
-                      className={`bookmark-btn ${
-                        bookmarkStatus[paper.paper_id] || paper.is_bookmarked 
-                          ? 'bookmarked' 
-                          : 'not-bookmarked'
-                      }`}
-                      title={
-                        bookmarkStatus[paper.paper_id] || paper.is_bookmarked 
-                          ? 'Remove from bookmarks' 
-                          : 'Add to bookmarks'
-                      }
-                    >
-                      <i className={`fas fa-bookmark ${
-                        bookmarkStatus[paper.paper_id] || paper.is_bookmarked 
-                          ? '' 
-                          : 'far'
-                      }`}></i>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="paper-authors">
-                  <strong>Authors:</strong> {formatAuthors(paper.authors, 3)}
-                </div>
-
-                <div className="paper-details">
-                  {paper.published && (
-                    <span className="paper-date"><strong>Published:</strong> {paper.published}</span>
-                  )}
-                  {paper.citation_count !== undefined && paper.citation_count !== null && (
-                    <span className="citation-count"><strong>Citations:</strong> {paper.citation_count}</span>
-                  )}
-                </div>
-
-                <SmartPaperActions
-                  paper={paper}
-                  index={index}
-                  onViewDetails={handleViewDetails}
-                  onDownloadPaper={downloadPaper}
-                  onBuildGraph={handleBuildGraph}
-                  isBuildingGraph={buildingGraphFor === (paper.paper_id || paper.id)}
-                />
-              </div>
+              <PaperCard
+                key={paper.id || index}
+                paper={paper}
+                index={index}
+                isBookmarked={bookmarkStatus[paper.paper_id] || paper.is_bookmarked}
+                onToggleBookmark={toggleBookmark}
+                onViewDetails={handleViewDetails}
+                onDownloadPaper={downloadPaper}
+                onBuildGraph={handleBuildGraph}
+                isBuildingGraph={buildingGraphFor === (paper.paper_id || paper.id)}
+                showActions={true}
+                showRelevanceScore={true}
+              />
             ))}
           </div>
         </div>

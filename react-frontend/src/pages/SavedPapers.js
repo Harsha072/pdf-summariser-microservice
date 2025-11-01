@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { getCurrentSessionId } from '../services/api';
+import PaperCard from '../components/PaperCard/PaperCard';
 import '../components/common.css';
+import '../components/PaperDiscovery/PaperDiscovery.css';
 
 const SavedPapers = () => {
-  const { user } = useAuth();
+  const { user, refreshToken } = useAuth();
   const { addNotification } = useNotification();
   const [bookmarks, setBookmarks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,13 +22,26 @@ const SavedPapers = () => {
       setLoading(true);
       const sessionId = getCurrentSessionId();
       
-      const response = await fetch('/api/bookmarks', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Session-ID': sessionId,
-          ...(user && { 'Authorization': `Bearer ${await user.getIdToken()}` })
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-Session-ID': sessionId
+      };
+
+      // Add authorization header if user is authenticated
+      if (user && refreshToken) {
+        try {
+          const token = await refreshToken();
+          if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+          }
+        } catch (tokenError) {
+          console.warn('Failed to get user token:', tokenError);
         }
+      }
+
+      const response = await fetch('http://localhost:5000/api/bookmarks', {
+        method: 'GET',
+        headers: headers
       });
 
       const data = await response.json();
@@ -49,13 +64,26 @@ const SavedPapers = () => {
     try {
       const sessionId = getCurrentSessionId();
       
-      const response = await fetch('/api/bookmarks/remove', {
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-Session-ID': sessionId
+      };
+
+      // Add authorization header if user is authenticated
+      if (user && refreshToken) {
+        try {
+          const token = await refreshToken();
+          if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+          }
+        } catch (tokenError) {
+          console.warn('Failed to get user token:', tokenError);
+        }
+      }
+
+      const response = await fetch('http://localhost:5000/api/bookmarks/remove', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Session-ID': sessionId,
-          ...(user && { 'Authorization': `Bearer ${await user.getIdToken()}` })
-        },
+        headers: headers,
         body: JSON.stringify({ paper_id: paperId })
       });
 
@@ -141,93 +169,16 @@ const SavedPapers = () => {
           </div>
         ) : (
           <div className="papers-grid">
-            {bookmarks.map((paper) => (
-              <div key={paper.paper_id} className="paper-card saved-paper-card">
-                <div className="paper-header">
-                  <h3 className="paper-title">
-                    {paper.url ? (
-                      <a href={paper.url} target="_blank" rel="noopener noreferrer">
-                        {paper.title || 'Untitled Paper'}
-                      </a>
-                    ) : (
-                      paper.title || 'Untitled Paper'
-                    )}
-                  </h3>
-                  <button
-                    onClick={() => removeBookmark(paper.paper_id)}
-                    className="bookmark-btn bookmarked"
-                    title="Remove from bookmarks"
-                  >
-                    <i className="fas fa-bookmark"></i>
-                  </button>
-                </div>
-
-                <div className="paper-meta">
-                  {paper.authors && paper.authors.length > 0 && (
-                    <p className="authors">
-                      <i className="fas fa-user"></i>
-                      {Array.isArray(paper.authors) 
-                        ? paper.authors.slice(0, 3).join(', ')
-                        : paper.authors
-                      }
-                      {Array.isArray(paper.authors) && paper.authors.length > 3 && ' et al.'}
-                    </p>
-                  )}
-                  
-                  {paper.published && (
-                    <p className="published">
-                      <i className="fas fa-calendar"></i>
-                      {formatDate(paper.published)}
-                    </p>
-                  )}
-                  
-                  <p className="bookmarked-date">
-                    <i className="fas fa-bookmark"></i>
-                    Saved on {formatDate(paper.bookmarked_at)}
-                  </p>
-
-                  {paper.source && (
-                    <span className={`source-badge source-${paper.source.toLowerCase().replace(' ', '-')}`}>
-                      {paper.source}
-                    </span>
-                  )}
-                </div>
-
-                {paper.summary && (
-                  <p className="paper-summary">
-                    {paper.summary.length > 300 
-                      ? `${paper.summary.substring(0, 300)}...`
-                      : paper.summary
-                    }
-                  </p>
-                )}
-
-                <div className="paper-actions">
-                  {paper.url && (
-                    <a 
-                      href={paper.url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="btn btn-secondary"
-                    >
-                      <i className="fas fa-external-link-alt"></i>
-                      View Paper
-                    </a>
-                  )}
-                  
-                  {paper.pdf_url && (
-                    <a 
-                      href={paper.pdf_url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="btn btn-outline"
-                    >
-                      <i className="fas fa-file-pdf"></i>
-                      Download PDF
-                    </a>
-                  )}
-                </div>
-              </div>
+            {bookmarks.map((paper, index) => (
+              <PaperCard
+                key={paper.paper_id || index}
+                paper={paper}
+                index={index}
+                isBookmarked={true}
+                onToggleBookmark={removeBookmark}
+                showActions={true}
+                showRelevanceScore={false}
+              />
             ))}
           </div>
         )}
