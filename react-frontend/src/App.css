@@ -1,0 +1,41 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: var(--background-color);
+}
+
+.app-main {
+  flex: 1;
+  padding: 2rem;
+}
+
+.app-container {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr; /* Give more space to PDF viewer */
+  gap: 1.5rem;
+  max-width: 1600px; /* Increase max width */
+  margin: 0 auto;
+  height: calc(100vh - 140px);
+}
+
+@media (max-width: 1024px) {
+  .app-container {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  
+  .app-main {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-container {
+    gap: 1rem;
+  }
+  
+  .app-main {
+    padding: 0.5rem;
+  }
+}

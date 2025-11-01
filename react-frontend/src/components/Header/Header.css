@@ -1,0 +1,108 @@
+
+/* --- New Navbar Styles --- */
+.navbar {
+  background: #f8fafc;
+  color: #111827;
+  padding: 0.5rem 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+}
+
+.navbar-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.navbar-logo {
+  display: flex;
+  align-items: center;
+  font-family: 'Georgia', serif;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -1px;
+}
+.logo-icon {
+  font-size: 2.2rem;
+  margin-right: 0.3rem;
+  color: #111827;
+}
+.logo-text {
+  font-size: 1.7rem;
+  font-weight: 700;
+  color: #111827;
+}
+.logo-reg {
+  font-size: 1rem;
+  vertical-align: super;
+  margin-left: 0.1rem;
+  color: #111827;
+}
+
+.navbar-menu {
+  display: flex;
+  align-items: center;
+  gap: 2.5rem;
+}
+.navbar-link {
+  color: #111827;
+  text-decoration: none;
+  font-size: 1.08rem;
+  font-weight: 500;
+  transition: color 0.2s;
+  position: relative;
+}
+.navbar-link:hover {
+  color: #2563eb;
+}
+.navbar-caret {
+  font-size: 0.9em;
+  margin-left: 0.2em;
+}
+
+.navbar-login {
+  margin-left: 2rem;
+}
+.login-btn {
+  background: #111827;
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 0.5rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.login-btn:hover {
+  background: #2563eb;
+}
+
+@media (max-width: 900px) {
+  .navbar-menu {
+    gap: 1.2rem;
+  }
+  .navbar-container {
+    padding: 0 1rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .navbar-container {
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+  .navbar-menu {
+    flex-wrap: wrap;
+    gap: 0.7rem;
+  }
+  .navbar-login {
+    margin-left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: flex-end;
+  }
+}

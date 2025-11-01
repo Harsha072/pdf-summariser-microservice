@@ -1,0 +1,30 @@
+
+.env
+myenv/
+__pycache__/
+chroma_db/
+*.pyc
+*.pyo
+*.pyd
+site-packages/
+*.egg-info/
+dist/
+build/
+
+# Firebase Service Account JSON (NEVER commit this!)
+*firebase*adminsdk*.json
+firebase-service-account.json
+scholar-quest-firebase-adminsdk.json
+
+# Node.js dependencies
+react-frontend/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# React build output
+react-frontend/build/
+react-frontend/.env.local
+react-frontend/.env.development.local
+react-frontend/.env.test.local
+react-frontend/.env.production.local

@@ -1,9 +1,0 @@
-langchain
-langchain-community
-langchain_openai
-openai
-PyPDF2
-flask
-flask-restful
-python-dotenv
-pypdf

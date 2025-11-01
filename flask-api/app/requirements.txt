@@ -1,12 +1,31 @@
-celery
-redis
-langchain
-langchain-community
+# Academic Paper Discovery Engine Dependencies
+flask
+flask-cors
 langchain_openai
 openai
-PyPDF2
-flask
-flask-restful
 python-dotenv
-pypdf
-chromadb
+
+# PDF Processing
+PyMuPDF
+
+# Web Scraping for Paper Discovery
+requests
+
+# Text Processing and Similarity
+fuzzywuzzy
+python-levenshtein
+
+# Vector Database and ML
+faiss-cpu
+sentence-transformers
+scikit-learn
+numpy
+
+# Firebase
+firebase-admin
+
+# Caching Layer
+redis
+
+# Utilities
+werkzeug
