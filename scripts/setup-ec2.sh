@@ -22,24 +22,58 @@ echo_warn() {
     echo -e "${YELLOW}[WARN]${NC} $1"
 }
 
+# Detect OS type
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    OS=$ID
+else
+    OS=$(uname -s)
+fi
+
+echo_info "Detected OS: $OS"
+
 # Update system
 echo_info "Updating system packages..."
-sudo apt update
-sudo apt upgrade -y
-
-# Install Python and dependencies
-echo_info "Installing Python and build tools..."
-sudo apt install -y \
-    python3 \
-    python3-pip \
-    python3-venv \
-    python3-dev \
-    build-essential \
-    libssl-dev \
-    libffi-dev \
-    git \
-    curl \
-    wget
+if [ "$OS" = "ubuntu" ] || [ "$OS" = "debian" ]; then
+    sudo apt update
+    sudo apt upgrade -y
+    
+    # Install Python and dependencies
+    echo_info "Installing Python and build tools..."
+    sudo apt install -y \
+        python3 \
+        python3-pip \
+        python3-venv \
+        python3-dev \
+        build-essential \
+        libssl-dev \
+        libffi-dev \
+        git \
+        curl \
+        wget
+elif [ "$OS" = "amzn" ] || [ "$OS" = "rhel" ] || [ "$OS" = "centos" ]; then
+    sudo yum update -y
+    
+    # Install Python and dependencies
+    echo_info "Installing Python and build tools..."
+    sudo yum install -y \
+        python3 \
+        python3-pip \
+        python3-devel \
+        gcc \
+        openssl-devel \
+        libffi-devel \
+        git \
+        curl \
+        wget
+    
+    # Install virtualenv
+    sudo pip3 install virtualenv
+else
+    echo_warn "Unknown OS: $OS. Attempting Ubuntu/Debian commands..."
+    sudo apt update && sudo apt upgrade -y
+    sudo apt install -y python3 python3-pip python3-venv python3-dev git curl wget
+fi
 
 # Verify installations
 echo_info "Verifying installations..."
@@ -128,9 +162,18 @@ sudo systemctl enable flask-api
 
 # Configure firewall
 echo_info "Configuring firewall..."
-sudo ufw allow 22/tcp
-sudo ufw allow 5000/tcp
-echo_info "Firewall rules added (not enabled yet)"
+if command -v ufw &> /dev/null; then
+    sudo ufw allow 22/tcp
+    sudo ufw allow 5000/tcp
+    echo_info "Firewall rules added (ufw not enabled yet)"
+elif command -v firewall-cmd &> /dev/null; then
+    sudo firewall-cmd --permanent --add-port=22/tcp
+    sudo firewall-cmd --permanent --add-port=5000/tcp
+    sudo firewall-cmd --reload
+    echo_info "Firewall rules added (firewalld)"
+else
+    echo_warn "No firewall detected. Make sure EC2 Security Group allows ports 22 and 5000"
+fi
 
 # Create .env template
 if [ ! -f "$FLASK_DIR/.env" ]; then

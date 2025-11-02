@@ -63,10 +63,14 @@ if [ -d "chroma_db" ] && [ ! -s "chroma_db/chroma.sqlite3" ]; then
     rm -rf chroma_db/ 2>/dev/null || true
 fi
 
-# 9. Clean apt cache (system-wide)
-echo "Cleaning apt cache..."
-sudo apt-get clean 2>/dev/null || true
-sudo apt-get autoclean 2>/dev/null || true
+# 9. Clean package manager cache (system-wide)
+echo "Cleaning package manager cache..."
+if command -v apt-get &> /dev/null; then
+    sudo apt-get clean 2>/dev/null || true
+    sudo apt-get autoclean 2>/dev/null || true
+elif command -v yum &> /dev/null; then
+    sudo yum clean all 2>/dev/null || true
+fi
 
 # 10. Remove old log files
 echo "Removing old log files..."
@@ -85,6 +89,11 @@ echo ""
 echo "✅ Cleanup completed successfully!"
 echo ""
 echo "💡 Additional optimization tips:"
-echo "   1. Run: sudo apt-get autoremove"
+echo "   1. Run package autoremove:"
+if command -v apt-get &> /dev/null; then
+    echo "      sudo apt-get autoremove"
+elif command -v yum &> /dev/null; then
+    echo "      sudo yum autoremove"
+fi
 echo "   2. Setup log rotation: sudo nano /etc/logrotate.d/flask-api"
 echo "   3. Clear old journal logs: sudo journalctl --vacuum-size=100M"
