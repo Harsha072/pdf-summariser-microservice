@@ -23,6 +23,12 @@
   font-size: 2rem;
   font-weight: 700;
   letter-spacing: -1px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.navbar-logo:hover {
+  opacity: 0.8;
 }
 .logo-icon {
   font-size: 2.2rem;
@@ -45,6 +51,8 @@
   display: flex;
   align-items: center;
   gap: 2.5rem;
+  flex: 1;
+  justify-content: center;
 }
 .navbar-link {
   color: #111827;
@@ -57,9 +65,17 @@
 .navbar-link:hover {
   color: #2563eb;
 }
+.navbar-link.active {
+  color: #2563eb;
+  font-weight: 600;
+}
 .navbar-caret {
   font-size: 0.9em;
   margin-left: 0.2em;
+}
+
+.navbar-user {
+  margin-left: auto;
 }
 
 .navbar-login {

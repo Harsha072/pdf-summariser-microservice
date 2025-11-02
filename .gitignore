@@ -11,6 +11,27 @@ site-packages/
 dist/
 build/
 
+# Test and Coverage files (not needed in production)
+htmlcov/
+.coverage
+.pytest_cache/
+*.coverage
+.tox/
+.hypothesis/
+
+# Temporary files
+*.log
+*.tmp
+*.swp
+*~
+.DS_Store
+
+# Flask temporary directories
+flask-api/app/temp/
+flask-api/app/temp_uploads/
+flask-api/app/logs/*.log
+flask-api/app/data/citation_cache/
+
 # Firebase Service Account JSON (NEVER commit this!)
 *firebase*adminsdk*.json
 firebase-service-account.json

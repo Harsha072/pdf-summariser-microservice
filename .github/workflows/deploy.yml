@@ -1,0 +1,43 @@
+name: Deploy to AWS EC2
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Deploy to EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ubuntu
+          EC2_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          # Setup SSH key
+          echo "$EC2_KEY" > key.pem
+          chmod 600 key.pem
+          
+          # Upload files to EC2
+          rsync -avz --delete \
+            --exclude '.git' \
+            --exclude 'myenv' \
+            --exclude 'node_modules' \
+            -e "ssh -i key.pem -o StrictHostKeyChecking=no" \
+            . $EC2_USER@$EC2_HOST:/home/ubuntu/pdf-summariser/
+          
+          # Deploy on EC2
+          ssh -i key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << 'EOF'
+            cd /home/ubuntu/pdf-summariser
+            docker-compose -f docker-compose.prod.yml pull
+            docker-compose -f docker-compose.prod.yml up -d --build
+            docker-compose -f docker-compose.prod.yml ps
+          EOF
+          
+          echo "✅ Deployment complete!"
