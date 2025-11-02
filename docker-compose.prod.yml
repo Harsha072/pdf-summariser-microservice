@@ -67,7 +67,7 @@ services:
       - FIREBASE_SERVICE_ACCOUNT_PATH=/app/credentials/firebase-adminsdk.json
       
       # Application settings
-      - MAX_WORKERS=${MAX_WORKERS:-4}
+      - MAX_WORKERS=${MAX_WORKERS:-2}  # Reduced for t3.small (2GB RAM)
       - DEFAULT_MAX_RESULTS=${DEFAULT_MAX_RESULTS:-10}
       - MAX_ALLOWED_RESULTS=${MAX_ALLOWED_RESULTS:-20}
       - DUPLICATE_THRESHOLD=${DUPLICATE_THRESHOLD:-0.85}
@@ -91,11 +91,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'
-          memory: 2G
+          cpus: '1.5'
+          memory: 1G
         reservations:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '0.25'
+          memory: 256M
     logging:
       driver: "json-file"
       options:

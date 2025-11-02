@@ -17,7 +17,7 @@ jobs:
       - name: Deploy to EC2
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USER: ubuntu
+          EC2_USER: ${{ secrets.EC2_USER }}
           EC2_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
           # Setup SSH key
@@ -30,11 +30,11 @@ jobs:
             --exclude 'myenv' \
             --exclude 'node_modules' \
             -e "ssh -i key.pem -o StrictHostKeyChecking=no" \
-            . $EC2_USER@$EC2_HOST:/home/ubuntu/pdf-summariser/
+            . $EC2_USER@$EC2_HOST:${{ secrets.APP_DIR }}/
           
           # Deploy on EC2
           ssh -i key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << 'EOF'
-            cd /home/ubuntu/pdf-summariser
+            cd ${{ secrets.APP_DIR }}
             docker-compose -f docker-compose.prod.yml pull
             docker-compose -f docker-compose.prod.yml up -d --build
             docker-compose -f docker-compose.prod.yml ps
