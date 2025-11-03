@@ -35,9 +35,9 @@ jobs:
           # Deploy on EC2
           ssh -i key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << 'EOF'
             cd ${{ secrets.APP_DIR }}
-            docker-compose -f docker-compose.prod.yml pull
-            docker-compose -f docker-compose.prod.yml up -d --build
-            docker-compose -f docker-compose.prod.yml ps
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d
+            docker compose -f docker-compose.prod.yml ps
           EOF
           
           echo "✅ Deployment complete!"

@@ -30,9 +30,7 @@ services:
 
   # Flask API (connects to Redis Cloud - no local Redis needed)
   flask-api:
-    build:
-      context: ./flask-api
-      dockerfile: Dockerfile
+    image: harshaswamy789475/pdf-summariser-api:latest  # Pull pre-built image from Docker Hub
     container_name: pdf-summariser-api
     expose:
       - "5000"
