@@ -11,14 +11,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements file and install dependencies
-COPY ./app/requirements.txt .
+COPY app/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt gunicorn
 
 # Copy application code
-COPY ./app /app
+COPY app/ .
 
 # Create necessary directories
-RUN mkdir -p /app/data/citation_cache /app/logs /app/temp /app/temp_uploads
+RUN mkdir -p data/citation_cache logs temp temp_uploads
 
 # Expose the application port
 EXPOSE ${PORT:-5000}
