@@ -15,7 +15,7 @@ COPY app/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt gunicorn
 
 # Copy application code
-COPY app/ .
+COPY . .
 
 # Create necessary directories
 RUN mkdir -p data/citation_cache logs temp temp_uploads
