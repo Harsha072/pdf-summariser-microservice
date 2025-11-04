@@ -20,7 +20,8 @@ python-levenshtein==0.23.0
 
 # Vector Database and ML (Optimized for low disk space)
 faiss-cpu==1.7.4
-sentence-transformers==2.2.2
+sentence-transformers==2.5.1
+huggingface-hub==0.20.3
 scikit-learn==1.2.2  # Lighter version
 numpy==1.23.5  # Lighter version
 
