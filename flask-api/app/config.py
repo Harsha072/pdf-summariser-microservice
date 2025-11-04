@@ -152,7 +152,22 @@ class FirebaseConfig:
             return
         
         try:
-            # Option 1: Using service account key file
+            # Option 1: Using base64 encoded credentials (Railway, Render, etc.)
+            if os.getenv('FIREBASE_CREDENTIALS_BASE64'):
+                import base64
+                import json
+                try:
+                    creds_json = base64.b64decode(os.getenv('FIREBASE_CREDENTIALS_BASE64'))
+                    creds_dict = json.loads(creds_json)
+                    cred = credentials.Certificate(creds_dict)
+                    self.app = firebase_admin.initialize_app(cred)
+                    logger.info("✅ Firebase Admin SDK initialized from base64 environment variable")
+                    self.available = True
+                    return
+                except Exception as e:
+                    logger.error(f"❌ Failed to decode base64 Firebase credentials: {e}")
+            
+            # Option 2: Using service account key file
             service_account_path = os.getenv('FIREBASE_SERVICE_ACCOUNT_PATH')
             if service_account_path and os.path.exists(service_account_path):
                 cred = credentials.Certificate(service_account_path)
@@ -160,7 +175,7 @@ class FirebaseConfig:
                 logger.info("✅ Firebase Admin SDK initialized with service account file")
                 self.available = True
             
-            # Option 2: Using service account JSON from environment variable
+            # Option 3: Using service account JSON from environment variable
             elif os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON'):
                 import json
                 service_account_info = json.loads(os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON'))
@@ -171,7 +186,7 @@ class FirebaseConfig:
             
             else:
                 logger.warning("⚠️ Firebase service account not configured - auth features disabled")
-                logger.info("💡 Set FIREBASE_SERVICE_ACCOUNT_PATH or FIREBASE_SERVICE_ACCOUNT_JSON environment variable")
+                logger.info("💡 Set FIREBASE_CREDENTIALS_BASE64, FIREBASE_SERVICE_ACCOUNT_PATH or FIREBASE_SERVICE_ACCOUNT_JSON")
                 
         except Exception as e:
             logger.error(f"❌ Firebase initialization failed: {e}")

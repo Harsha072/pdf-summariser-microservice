@@ -20,8 +20,11 @@ COPY ./app .
 # Expose the application port
 EXPOSE 5000
 
-# Add a health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s CMD curl -f http://localhost:5000/health || exit 1
+# Add environment variable for PORT (Railway compatibility)
+ENV PORT=5000
 
-# Run with Gunicorn for production (4 workers, 2 threads each)
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--threads", "2", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "main:app"]
+# Add a health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s CMD curl -f http://localhost:${PORT:-5000}/health || exit 1
+
+# Run with Gunicorn for production (2 workers for Railway/low-memory environments)
+CMD gunicorn --bind 0.0.0.0:${PORT:-5000} --workers ${MAX_WORKERS:-2} --threads 2 --timeout 120 --access-logfile - --error-logfile - main:app

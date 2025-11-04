@@ -37,8 +37,6 @@ services:
     expose:
       - "5000"
     volumes:
-      # Mount Firebase credentials (READ ONLY)
-      - ./flask-api/app/scholar-quest-firebase-adminsdk.json:/app/credentials/firebase-adminsdk.json:ro
       # Persistent data volumes
       - app-logs:/app/logs
       - app-data:/app/data  # FAISS index persistence
@@ -47,6 +45,7 @@ services:
       # Flask settings
       - FLASK_ENV=production
       - DEBUG=false
+      - PORT=${PORT:-5000}
       
       # OpenAI
       - OPENAI_API_KEY=${OPENAI_API_KEY}
@@ -63,11 +62,12 @@ services:
       - REDIS_DB=${REDIS_DB:-0}
       - ENABLE_REDIS=true
       
-      # Firebase
+      # Firebase (Railway uses base64 env var)
+      - FIREBASE_CREDENTIALS_BASE64=${FIREBASE_CREDENTIALS_BASE64}
       - FIREBASE_SERVICE_ACCOUNT_PATH=/app/credentials/firebase-adminsdk.json
       
       # Application settings
-      - MAX_WORKERS=${MAX_WORKERS:-2}  # Reduced for t3.small (2GB RAM)
+      - MAX_WORKERS=${MAX_WORKERS:-2}  # Optimized for Railway
       - DEFAULT_MAX_RESULTS=${DEFAULT_MAX_RESULTS:-10}
       - MAX_ALLOWED_RESULTS=${MAX_ALLOWED_RESULTS:-20}
       - DUPLICATE_THRESHOLD=${DUPLICATE_THRESHOLD:-0.85}
@@ -83,7 +83,7 @@ services:
       - app-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -91,7 +91,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.5'
+          cpus: '1.0'
           memory: 1G
         reservations:
           cpus: '0.25'
