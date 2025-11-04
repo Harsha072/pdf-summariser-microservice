@@ -1,7 +1,7 @@
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "flask-api/Dockerfile"
-dockerContext = "flask-api"
+dockerContext = "."
 
 [deploy]
 startCommand = "gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 2 --timeout 120 main:app"
