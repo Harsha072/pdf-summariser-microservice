@@ -15,16 +15,25 @@ COPY ./app/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt gunicorn
 
 # Copy application code
-COPY ./app .
+COPY ./app /app
+
+# Create necessary directories
+RUN mkdir -p /app/data/citation_cache /app/logs /app/temp /app/temp_uploads
 
 # Expose the application port
-EXPOSE 5000
+EXPOSE ${PORT:-5000}
 
 # Add environment variable for PORT (Railway compatibility)
 ENV PORT=5000
 
 # Add a health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s CMD curl -f http://localhost:${PORT:-5000}/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-5000}/health || exit 1
 
-# Run with Gunicorn for production (2 workers for Railway/low-memory environments)
-CMD gunicorn --bind 0.0.0.0:${PORT:-5000} --workers ${MAX_WORKERS:-2} --threads 2 --timeout 120 --access-logfile - --error-logfile - main:app
+# Run with Gunicorn for production (Railway optimized)
+CMD gunicorn --bind 0.0.0.0:${PORT:-5000} \
+    --workers ${MAX_WORKERS:-2} \
+    --threads 2 \
+    --timeout 120 \
+    --log-level info \
+    main:app
