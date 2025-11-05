@@ -157,7 +157,12 @@ class FirebaseConfig:
                 import base64
                 import json
                 try:
-                    creds_json = base64.b64decode(os.getenv('FIREBASE_CREDENTIALS_BASE64'))
+                    # Sanitize and fix padding for base64 strings coming from envvars or copy/paste
+                    b64 = os.getenv('FIREBASE_CREDENTIALS_BASE64').strip().replace('\n', '').replace(' ', '')
+                    missing = len(b64) % 4
+                    if missing:
+                        b64 += '=' * (4 - missing)
+                    creds_json = base64.b64decode(b64)
                     creds_dict = json.loads(creds_json)
                     cred = credentials.Certificate(creds_dict)
                     self.app = firebase_admin.initialize_app(cred)
@@ -214,23 +219,75 @@ class OpenAIConfig:
     def _initialize_openai(self):
         """Initialize OpenAI client"""
         try:
-            from langchain_openai import ChatOpenAI
-            
+            # Try to initialize a langchain ChatOpenAI (various package names across versions)
+            ChatOpenAIClass = None
+            try:
+                # modern langchain placement
+                from langchain.chat_models import ChatOpenAI as ChatOpenAIClass
+            except Exception:
+                try:
+                    # older/smaller wrapper package
+                    from langchain_openai import ChatOpenAI as ChatOpenAIClass
+                except Exception:
+                    ChatOpenAIClass = None
+
             api_key = Config.OPENAI_API_KEY
             if api_key and api_key.strip():
-                self.client = ChatOpenAI(
-                    api_key=api_key,
-                    model_name=Config.OPENAI_MODEL,
-                    temperature=Config.OPENAI_TEMPERATURE,
-                    max_tokens=Config.OPENAI_MAX_TOKENS
-                )
-                logger.info("✅ OpenAI client initialized successfully")
+                if ChatOpenAIClass:
+                    try:
+                        self.client = ChatOpenAIClass(
+                            api_key=api_key,
+                            model_name=Config.OPENAI_MODEL,
+                            temperature=Config.OPENAI_TEMPERATURE,
+                            max_tokens=Config.OPENAI_MAX_TOKENS
+                        )
+                        logger.info("✅ OpenAI client initialized successfully (langchain)")
+                        return
+                    except TypeError as e:
+                        # Some langchain/chat wrappers pass unexpected kwargs (e.g. 'proxies') depending on versions
+                        logger.warning(f"⚠️ ChatOpenAI init failed ({e}) - falling back to raw OpenAI client")
+
+                # Fallback: use the raw openai client and provide a small wrapper with an `invoke` method
+                try:
+                    import openai
+                    openai.api_key = api_key
+
+                    class _SimpleResponse:
+                        def __init__(self, content: str):
+                            self.content = content
+
+                    class _SimpleOpenAIWrapper:
+                        def __init__(self, openai_mod, model: str, temperature: float, max_tokens: int):
+                            self._openai = openai_mod
+                            self._model = model
+                            self._temperature = temperature
+                            self._max_tokens = max_tokens
+
+                        def invoke(self, prompt: str):
+                            # Use ChatCompletion (works with openai>=0.27+)
+                            resp = self._openai.ChatCompletion.create(
+                                model=self._model,
+                                messages=[{"role": "user", "content": prompt}],
+                                temperature=self._temperature,
+                                max_tokens=self._max_tokens
+                            )
+                            content = resp['choices'][0]['message']['content']
+                            return _SimpleResponse(content)
+
+                    self.client = _SimpleOpenAIWrapper(openai, Config.OPENAI_MODEL, Config.OPENAI_TEMPERATURE, Config.OPENAI_MAX_TOKENS)
+                    logger.info("✅ OpenAI client initialized successfully (raw openai fallback)")
+                    return
+                except Exception as e:
+                    logger.error(f"❌ Failed to initialize OpenAI raw client: {e}")
+                    self.client = None
+                    return
             else:
                 logger.warning("⚠️ OpenAI API key not found. AI features will use fallback methods.")
                 logger.info("💡 Set OPENAI_API_KEY environment variable to enable AI features")
                 
         except ImportError:
-            logger.warning("⚠️ OpenAI library not available. Install with: pip install langchain-openai")
+            logger.warning("⚠️ OpenAI libraries not available. Install with: pip install openai or langchain")
+            self.client = None
         except Exception as e:
             logger.error(f"❌ Failed to initialize OpenAI client: {e}")
             self.client = None
