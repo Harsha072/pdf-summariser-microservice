@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy requirements file and install dependencies
 COPY flask-api/app/requirements.txt ./requirements.txt
 # Install numpy first to ensure compiled wheels are in place before heavy packages (faiss, sentence-transformers)
-RUN pip install --no-cache-dir numpy==1.23.5 && \
+RUN pip install --no-cache-dir numpy==1.24.3 && \
     pip install --no-cache-dir -r requirements.txt gunicorn
 
 # Copy application code
