@@ -258,7 +258,7 @@ class OpenAIConfig:
 
                 # Fallback: use the raw openai>=1.0 client and provide a small wrapper with an `invoke` method
                 try:
-                    from openai import OpenAI
+                    from openai import OpenAI as OpenAIClient
 
                     class _SimpleResponse:
                         def __init__(self, content: str):
@@ -266,7 +266,8 @@ class OpenAIConfig:
 
                     class _SimpleOpenAIWrapper:
                         def __init__(self, api_key: str, model: str, temperature: float, max_tokens: int):
-                            self._client = OpenAI(api_key=api_key)
+                            # Initialize with minimal parameters to avoid validation issues
+                            self._client = OpenAIClient(api_key=api_key)
                             self._model = model
                             self._temperature = temperature
                             self._max_tokens = max_tokens
@@ -287,6 +288,7 @@ class OpenAIConfig:
                     return
                 except Exception as e:
                     logger.error(f"❌ Failed to initialize OpenAI raw client: {e}")
+                    logger.info("💡 AI features will use fallback methods without OpenAI")
                     self.client = None
                     return
             else:
