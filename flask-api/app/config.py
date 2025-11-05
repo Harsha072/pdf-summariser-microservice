@@ -252,9 +252,9 @@ class OpenAIConfig:
                         )
                         logger.info("✅ OpenAI client initialized successfully (langchain)")
                         return
-                    except TypeError as e:
-                        # Some langchain/chat wrappers pass unexpected kwargs (e.g. 'proxies') depending on versions
-                        logger.warning(f"⚠️ ChatOpenAI init failed ({e}) - falling back to raw OpenAI client")
+                    except Exception as e:
+                        # Some langchain/chat wrappers have validation issues or unexpected kwargs
+                        logger.debug(f"ChatOpenAI init failed ({e}) - falling back to raw OpenAI client")
 
                 # Fallback: use the raw openai>=1.0 client and provide a small wrapper with an `invoke` method
                 try:
