@@ -157,20 +157,29 @@ class FirebaseConfig:
                 import base64
                 import json
                 try:
-                    # Sanitize and fix padding for base64 strings coming from envvars or copy/paste
-                    b64 = os.getenv('FIREBASE_CREDENTIALS_BASE64').strip().replace('\n', '').replace(' ', '')
-                    missing = len(b64) % 4
-                    if missing:
-                        b64 += '=' * (4 - missing)
-                    creds_json = base64.b64decode(b64)
-                    creds_dict = json.loads(creds_json)
+                    firebase_creds = os.getenv('FIREBASE_CREDENTIALS_BASE64').strip()
+                    
+                    # Try to decode as base64 first
+                    try:
+                        # Sanitize and fix padding for base64 strings
+                        b64 = firebase_creds.replace('\n', '').replace(' ', '')
+                        missing = len(b64) % 4
+                        if missing:
+                            b64 += '=' * (4 - missing)
+                        creds_json = base64.b64decode(b64)
+                        creds_dict = json.loads(creds_json)
+                    except Exception:
+                        # If base64 decode fails, try parsing as raw JSON directly
+                        logger.info("⚠️ Base64 decode failed, trying to parse as raw JSON")
+                        creds_dict = json.loads(firebase_creds)
+                    
                     cred = credentials.Certificate(creds_dict)
                     self.app = firebase_admin.initialize_app(cred)
-                    logger.info("✅ Firebase Admin SDK initialized from base64 environment variable")
+                    logger.info("✅ Firebase Admin SDK initialized from environment variable")
                     self.available = True
                     return
                 except Exception as e:
-                    logger.error(f"❌ Failed to decode base64 Firebase credentials: {e}")
+                    logger.error(f"❌ Failed to initialize Firebase credentials: {e}")
             
             # Option 2: Using service account key file
             service_account_path = os.getenv('FIREBASE_SERVICE_ACCOUNT_PATH')
@@ -247,35 +256,34 @@ class OpenAIConfig:
                         # Some langchain/chat wrappers pass unexpected kwargs (e.g. 'proxies') depending on versions
                         logger.warning(f"⚠️ ChatOpenAI init failed ({e}) - falling back to raw OpenAI client")
 
-                # Fallback: use the raw openai client and provide a small wrapper with an `invoke` method
+                # Fallback: use the raw openai>=1.0 client and provide a small wrapper with an `invoke` method
                 try:
-                    import openai
-                    openai.api_key = api_key
+                    from openai import OpenAI
 
                     class _SimpleResponse:
                         def __init__(self, content: str):
                             self.content = content
 
                     class _SimpleOpenAIWrapper:
-                        def __init__(self, openai_mod, model: str, temperature: float, max_tokens: int):
-                            self._openai = openai_mod
+                        def __init__(self, api_key: str, model: str, temperature: float, max_tokens: int):
+                            self._client = OpenAI(api_key=api_key)
                             self._model = model
                             self._temperature = temperature
                             self._max_tokens = max_tokens
 
                         def invoke(self, prompt: str):
-                            # Use ChatCompletion (works with openai>=0.27+)
-                            resp = self._openai.ChatCompletion.create(
+                            # Use OpenAI 1.0+ API
+                            response = self._client.chat.completions.create(
                                 model=self._model,
                                 messages=[{"role": "user", "content": prompt}],
                                 temperature=self._temperature,
                                 max_tokens=self._max_tokens
                             )
-                            content = resp['choices'][0]['message']['content']
+                            content = response.choices[0].message.content
                             return _SimpleResponse(content)
 
-                    self.client = _SimpleOpenAIWrapper(openai, Config.OPENAI_MODEL, Config.OPENAI_TEMPERATURE, Config.OPENAI_MAX_TOKENS)
-                    logger.info("✅ OpenAI client initialized successfully (raw openai fallback)")
+                    self.client = _SimpleOpenAIWrapper(api_key, Config.OPENAI_MODEL, Config.OPENAI_TEMPERATURE, Config.OPENAI_MAX_TOKENS)
+                    logger.info("✅ OpenAI client initialized successfully (openai>=1.0 fallback)")
                     return
                 except Exception as e:
                     logger.error(f"❌ Failed to initialize OpenAI raw client: {e}")
