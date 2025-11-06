@@ -13,31 +13,37 @@ services:
       - key: FIREBASE_CREDENTIALS_BASE64
         sync: false
       
+      
       - key: DEBUG
+        value: false
       - key: MAX_WORKERS
+        value: 2
       - key: FLASK_ENV
         value: production
       
+      
       - key: OPENAI_MODEL
-
+        value: gpt-3.5-turbo
       - key: OPENAI_TEMPERATURE
+        value: 0.3
       - key: OPENAI_MAX_TOKENS
-       
+        value: 1000
+      
       
       - key: REDIS_URL
         sync: false
       - key: ENABLE_REDIS
-        
+        value: true
       
       - key: DEFAULT_MAX_RESULTS
-        
+        value: 10
       - key: MAX_ALLOWED_RESULTS
-       
+        value: 20
       - key: DUPLICATE_THRESHOLD
-        
+        value: 0.85
       - key: REQUEST_TIMEOUT
-        
+        value: 30
       - key: MAX_UPLOAD_SIZE
-       
+        value: 16777216
     
     healthCheckPath: /health
