@@ -9,7 +9,7 @@ gunicorn==21.2.0
 openai==1.10.0
 
 # PDF Processing
-PyMuPDF==1.23.8
+PyMuPDF==1.24.13
 
 # Web Scraping
 requests==2.31.0

@@ -1,19 +1,11 @@
 services:
   - type: web
-    name: pdf-summariser-backend
-    runtime: python
+    name: scholar-quest-backend
+    runtime: docker
+    dockerfilePath: ./flask-api/Dockerfile
+    dockerContext: .
     region: oregon
     plan: free
-    
-    # Python buildpack configuration (faster than Docker)
-    buildCommand: |
-      cd flask-api/app
-      pip install --upgrade pip
-      pip install -r requirements.txt
-    
-    startCommand: |
-      cd flask-api/app
-      gunicorn --workers 2 --threads 2 --bind 0.0.0.0:$PORT --timeout 120 --log-level info main:app
     
     envVars:
       
