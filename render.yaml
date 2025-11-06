@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: pdf-summariser-backend
+    runtime: docker
+    dockerfilePath: ./flask-api/Dockerfile
+    dockerContext: .
+    region: oregon
+    plan: free
+    envVars:
+      - key: DEBUG
+        value: false
+      - key: MAX_WORKERS
+        value: 2
+      - key: FLASK_ENV
+        value: production
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: FIREBASE_CREDENTIALS_BASE64
+        sync: false
+    healthCheckPath: /health
