@@ -7,16 +7,44 @@ services:
     region: oregon
     plan: free
     envVars:
+      # ===== REQUIRED ENVIRONMENT VARIABLES =====
+      - key: OPENAI_API_KEY
+        sync: false  # Set this in Render Dashboard (Secret)
+      - key: FIREBASE_CREDENTIALS_BASE64
+        sync: false  # Set this in Render Dashboard (Secret) - Base64 encoded Firebase Admin SDK JSON
+      
+      # ===== PRODUCTION SETTINGS =====
       - key: DEBUG
         value: false
       - key: MAX_WORKERS
-        value: 2
+        value: 2  # 2 for free tier, increase to 4+ for paid plans
       - key: FLASK_ENV
         value: production
-      - key: OPENAI_API_KEY
-        sync: false
+      
+      # ===== OPENAI CONFIGURATION =====
+      - key: OPENAI_MODEL
+        value: gpt-3.5-turbo  # Options: gpt-3.5-turbo, gpt-4, gpt-4-turbo
+      - key: OPENAI_TEMPERATURE
+        value: 0.3  # 0.0 (deterministic) to 1.0 (creative)
+      - key: OPENAI_MAX_TOKENS
+        value: 1000
+      
+      # ===== REDIS CACHING (Optional - Recommended for Performance) =====
       - key: REDIS_URL
-        sync: false
-      - key: FIREBASE_CREDENTIALS_BASE64
-        sync: false
+        sync: false  # Optional: Set in Dashboard if using Redis (e.g., Redis Cloud free tier)
+      - key: ENABLE_REDIS
+        value: true  # Set to false to disable Redis even if REDIS_URL is set
+      
+      # ===== APPLICATION PERFORMANCE & LIMITS =====
+      - key: DEFAULT_MAX_RESULTS
+        value: 10  # Default number of search results
+      - key: MAX_ALLOWED_RESULTS
+        value: 20  # Maximum allowed search results per request
+      - key: DUPLICATE_THRESHOLD
+        value: 0.85  # Similarity threshold for duplicate detection (0.0-1.0)
+      - key: REQUEST_TIMEOUT
+        value: 30  # API request timeout in seconds
+      - key: MAX_UPLOAD_SIZE
+        value: 16777216  # Max file upload size in bytes (16MB)
+    
     healthCheckPath: /health
