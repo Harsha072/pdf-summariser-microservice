@@ -258,6 +258,16 @@ class OpenAIConfig:
 
                 # Fallback: use the raw openai>=1.0 client and provide a small wrapper with an `invoke` method
                 try:
+                    import sys
+                    import importlib
+                    
+                    # Force reimport openai to avoid any cached/monkey-patched versions
+                    if 'openai' in sys.modules:
+                        del sys.modules['openai']
+                    if 'openai.OpenAI' in sys.modules:
+                        del sys.modules['openai.OpenAI']
+                    
+                    import openai
                     from openai import OpenAI as OpenAIClient
 
                     class _SimpleResponse:
@@ -287,7 +297,9 @@ class OpenAIConfig:
                     logger.info("✅ OpenAI client initialized successfully (openai>=1.0 fallback)")
                     return
                 except Exception as e:
+                    import traceback
                     logger.error(f"❌ Failed to initialize OpenAI raw client: {e}")
+                    logger.debug(f"Full traceback: {traceback.format_exc()}")
                     logger.info("💡 AI features will use fallback methods without OpenAI")
                     self.client = None
                     return
