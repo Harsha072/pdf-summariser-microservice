@@ -5,6 +5,9 @@ services:
     region: oregon
     plan: free
     
+    # Specify Python version to avoid compatibility issues
+    pythonVersion: 3.11.9
+    
     # Python buildpack configuration (faster than Docker)
     buildCommand: |
       cd flask-api/app
