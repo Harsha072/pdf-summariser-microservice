@@ -1,5 +1,5 @@
-# Use a lightweight Python base image
-FROM python:3.9-slim
+# Use Python 3.11 (compatible with PyMuPDF)
+FROM python:3.11-slim
 
 # Set the working directory
 WORKDIR /app
