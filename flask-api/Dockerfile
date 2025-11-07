@@ -57,17 +57,20 @@ EXPOSE ${PORT:-5000}
 # Add environment variable for PORT (Railway compatibility)
 ENV PORT=5000
 
-# Add a health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:${PORT:-5000}/health || exit 1
+# Add a health check with longer startup time for ML model loading
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=5 \
+    CMD curl -f http://localhost:${PORT:-5000}/api/health || exit 1
 
 # Run with Gunicorn - USE ONLY 1 WORKER for 512MB RAM
+# Increased timeout for slow ML model initialization
 CMD gunicorn --bind 0.0.0.0:${PORT:-5000} \
     --workers 1 \
     --threads 1 \
-    --timeout 120 \
+    --timeout 300 \
+    --graceful-timeout 120 \
     --max-requests 100 \
     --max-requests-jitter 10 \
     --worker-class sync \
     --log-level info \
+    --preload \
     main:app
