@@ -237,8 +237,9 @@ class OpenAIConfig:
             # Set API key in environment for compatibility
             os.environ['OPENAI_API_KEY'] = api_key
             
-            # Try different initialization methods based on available libraries
-            self.client = self._try_langchain_init(api_key) or self._try_openai_v1_init(api_key)
+            # SKIP LangChain - use direct OpenAI client only (more reliable for Render)
+            logger.info("🔧 Initializing direct OpenAI client (skipping LangChain)...")
+            self.client = self._try_openai_v1_init(api_key)
             
             if self.client:
                 logger.info("✅ OpenAI client initialized successfully")
@@ -284,25 +285,31 @@ class OpenAIConfig:
     def _try_openai_v1_init(self, api_key: str):
         """Try to initialize using OpenAI v1.0+ client directly"""
         try:
+            import openai
+            logger.info(f"📦 OpenAI library version: {openai.__version__}")
+            
             from openai import OpenAI
             
             # Create a wrapper that mimics LangChain's interface
             class OpenAIDirectWrapper:
                 def __init__(self, api_key: str, model: str, temperature: float, max_tokens: int):
-                    # Initialize with minimal parameters for compatibility
-                    try:
-                        self._client = OpenAI(api_key=api_key)
-                    except TypeError as e:
-                        if 'proxies' in str(e):
-                            # Fallback: set API key via environment and initialize without parameters
-                            os.environ['OPENAI_API_KEY'] = api_key
-                            self._client = OpenAI()
-                        else:
-                            raise
-                    
+                    logger.info("🔧 Initializing OpenAI client wrapper...")
                     self.model = model
                     self.temperature = temperature
                     self.max_tokens = max_tokens
+                    
+                    # Method 1: Set environment variable first (most compatible)
+                    os.environ['OPENAI_API_KEY'] = api_key
+                    logger.info("✓ API key set in environment")
+                    
+                    # Method 2: Initialize with no parameters (uses env var)
+                    try:
+                        logger.info("🔧 Attempting OpenAI() initialization...")
+                        self._client = OpenAI()
+                        logger.info("✅ OpenAI client initialized successfully!")
+                    except Exception as e:
+                        logger.error(f"❌ OpenAI() init failed: {type(e).__name__}: {e}")
+                        raise
                 
                 def invoke(self, prompt: str):
                     """Mimic LangChain's invoke method"""
@@ -326,14 +333,16 @@ class OpenAIConfig:
                 temperature=Config.OPENAI_TEMPERATURE,
                 max_tokens=Config.OPENAI_MAX_TOKENS
             )
-            logger.info("🔧 Using direct OpenAI client wrapper")
+            logger.info("🔧 Direct OpenAI client wrapper created")
             return client
             
-        except ImportError:
-            logger.debug("OpenAI library not available")
+        except ImportError as e:
+            logger.error(f"❌ OpenAI library import failed: {e}")
             return None
         except Exception as e:
-            logger.debug(f"OpenAI direct init failed: {e}")
+            logger.error(f"❌ OpenAI direct init failed: {type(e).__name__}: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return None
     
     def is_available(self) -> bool:
