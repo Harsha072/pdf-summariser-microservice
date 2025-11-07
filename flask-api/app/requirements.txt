@@ -19,11 +19,12 @@ fuzzywuzzy==0.18.0
 python-levenshtein==0.23.0
 
 # Vector Database and ML (Optimized for low disk space)
+# CRITICAL: numpy MUST be <2.0 for faiss-cpu compatibility
+numpy>=1.23.0,<2.0.0
 faiss-cpu==1.7.4
 sentence-transformers==2.5.1
 huggingface-hub==0.20.3
-scikit-learn==1.2.2  # Lighter version
-numpy==1.23.5  # Lighter version
+scikit-learn==1.2.2
 
 # Firebase Authentication
 firebase-admin==6.3.0
