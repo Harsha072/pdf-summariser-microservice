@@ -22,11 +22,16 @@ RUN pip install --no-cache-dir "numpy<2.0.0,>=1.23.0"
 RUN pip install --no-cache-dir flask==3.0.0 flask-cors==4.0.0 python-dotenv==1.0.0 werkzeug==3.0.1 gunicorn==21.2.0
 
 # Install medium packages
-RUN pip install --no-cache-dir requests==2.31.0 openai==1.54.3
+RUN pip install --no-cache-dir requests==2.31.0
+
+# Install OpenAI with compatible httpx version
+RUN pip install --no-cache-dir httpx==0.27.0 h11==0.14.0 openai==1.54.3
 
 # Verify OpenAI version during build
 RUN echo "===== INSTALLED OPENAI VERSION =====" && \
     pip show openai | grep Version && \
+    echo "===== INSTALLED HTTPX VERSION =====" && \
+    pip show httpx | grep Version && \
     echo "===================================="
 
 # Install scikit-learn (will use existing numpy)
