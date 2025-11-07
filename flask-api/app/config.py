@@ -258,16 +258,6 @@ class OpenAIConfig:
 
                 # Fallback: use the raw openai>=1.0 client and provide a small wrapper with an `invoke` method
                 try:
-                    import sys
-                    import importlib
-                    
-                    # Force reimport openai to avoid any cached/monkey-patched versions
-                    if 'openai' in sys.modules:
-                        del sys.modules['openai']
-                    if 'openai.OpenAI' in sys.modules:
-                        del sys.modules['openai.OpenAI']
-                    
-                    import openai
                     from openai import OpenAI as OpenAIClient
 
                     class _SimpleResponse:
@@ -276,8 +266,14 @@ class OpenAIConfig:
 
                     class _SimpleOpenAIWrapper:
                         def __init__(self, api_key: str, model: str, temperature: float, max_tokens: int):
-                            # Initialize with minimal parameters to avoid validation issues
-                            self._client = OpenAIClient(api_key=api_key)
+                            # Initialize with ONLY api_key - no other parameters
+                            try:
+                                self._client = OpenAIClient(api_key=api_key)
+                            except TypeError as te:
+                                # If even api_key fails, try with no params and set via env
+                                logger.warning(f"OpenAI client init with api_key failed: {te}, trying environment variable")
+                                os.environ['OPENAI_API_KEY'] = api_key
+                                self._client = OpenAIClient()
                             self._model = model
                             self._temperature = temperature
                             self._max_tokens = max_tokens
