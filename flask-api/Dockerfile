@@ -14,23 +14,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy requirements file
 COPY flask-api/app/requirements.txt ./requirements.txt
 
-# Install packages one by one to reduce memory spikes
-# Install lightweight packages first
+# CRITICAL: Install numpy 1.x FIRST before any other package
+# faiss-cpu 1.7.4 is compiled with NumPy 1.x and WILL CRASH with NumPy 2.x
+RUN pip install --no-cache-dir "numpy<2.0.0,>=1.23.0"
+
+# Install lightweight packages
 RUN pip install --no-cache-dir flask==3.0.0 flask-cors==4.0.0 python-dotenv==1.0.0 werkzeug==3.0.1 gunicorn==21.2.0
 
 # Install medium packages
 RUN pip install --no-cache-dir requests==2.31.0 openai==1.10.0
 
-# Install numpy (needed by other packages)
-RUN pip install --no-cache-dir numpy==1.23.5
+# Install scikit-learn (will use existing numpy)
+RUN pip install --no-cache-dir scikit-learn==1.2.2
 
-# Install heavy ML packages one at a time with memory limits
-RUN pip install --no-cache-dir --no-deps scikit-learn==1.2.2
-RUN pip install --no-cache-dir --no-deps faiss-cpu==1.7.4
+# Install faiss-cpu (MUST have numpy<2.0 already installed)
+RUN pip install --no-cache-dir faiss-cpu==1.7.4
+
+# Install text processing
 RUN pip install --no-cache-dir fuzzywuzzy==0.18.0 python-levenshtein==0.23.0
+
+# Install PyMuPDF
 RUN pip install --no-cache-dir PyMuPDF==1.24.13
 
-# Install sentence-transformers with minimal dependencies
+# Install sentence-transformers with dependencies
 RUN pip install --no-cache-dir sentence-transformers==2.5.1 huggingface-hub==0.20.3
 
 # Install Firebase
