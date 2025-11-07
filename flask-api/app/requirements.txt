@@ -7,6 +7,8 @@ gunicorn==21.2.0
 
 # AI/LLM Integration
 openai==1.54.3
+httpx==0.27.0  # Required for OpenAI client compatibility
+h11==0.14.0    # Required for httpx
 
 # PDF Processing
 PyMuPDF==1.24.13
