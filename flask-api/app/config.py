@@ -226,89 +226,115 @@ class OpenAIConfig:
         self._initialize_openai()
     
     def _initialize_openai(self):
-        """Initialize OpenAI client"""
+        """Initialize OpenAI client with version compatibility"""
+        api_key = Config.OPENAI_API_KEY
+        if not api_key or not api_key.strip():
+            logger.warning("⚠️ OpenAI API key not found. AI features will use fallback methods.")
+            logger.info("💡 Set OPENAI_API_KEY environment variable to enable AI features")
+            return
+        
         try:
-            # Try to initialize a langchain ChatOpenAI (various package names across versions)
-            ChatOpenAIClass = None
-            try:
-                # modern langchain placement
-                from langchain.chat_models import ChatOpenAI as ChatOpenAIClass
-            except Exception:
-                try:
-                    # older/smaller wrapper package
-                    from langchain_openai import ChatOpenAI as ChatOpenAIClass
-                except Exception:
-                    ChatOpenAIClass = None
-
-            api_key = Config.OPENAI_API_KEY
-            if api_key and api_key.strip():
-                if ChatOpenAIClass:
-                    try:
-                        self.client = ChatOpenAIClass(
-                            api_key=api_key,
-                            model_name=Config.OPENAI_MODEL,
-                            temperature=Config.OPENAI_TEMPERATURE,
-                            max_tokens=Config.OPENAI_MAX_TOKENS
-                        )
-                        logger.info("✅ OpenAI client initialized successfully (langchain)")
-                        return
-                    except Exception as e:
-                        # Some langchain/chat wrappers have validation issues or unexpected kwargs
-                        logger.debug(f"ChatOpenAI init failed ({e}) - falling back to raw OpenAI client")
-
-                # Fallback: use the raw openai>=1.0 client and provide a small wrapper with an `invoke` method
-                try:
-                    from openai import OpenAI as OpenAIClient
-
-                    class _SimpleResponse:
-                        def __init__(self, content: str):
-                            self.content = content
-
-                    class _SimpleOpenAIWrapper:
-                        def __init__(self, api_key: str, model: str, temperature: float, max_tokens: int):
-                            # Initialize with ONLY api_key - no other parameters
-                            try:
-                                self._client = OpenAIClient(api_key=api_key)
-                            except TypeError as te:
-                                # If even api_key fails, try with no params and set via env
-                                logger.warning(f"OpenAI client init with api_key failed: {te}, trying environment variable")
-                                os.environ['OPENAI_API_KEY'] = api_key
-                                self._client = OpenAIClient()
-                            self._model = model
-                            self._temperature = temperature
-                            self._max_tokens = max_tokens
-
-                        def invoke(self, prompt: str):
-                            # Use OpenAI 1.0+ API
-                            response = self._client.chat.completions.create(
-                                model=self._model,
-                                messages=[{"role": "user", "content": prompt}],
-                                temperature=self._temperature,
-                                max_tokens=self._max_tokens
-                            )
-                            content = response.choices[0].message.content
-                            return _SimpleResponse(content)
-
-                    self.client = _SimpleOpenAIWrapper(api_key, Config.OPENAI_MODEL, Config.OPENAI_TEMPERATURE, Config.OPENAI_MAX_TOKENS)
-                    logger.info("✅ OpenAI client initialized successfully (openai>=1.0 fallback)")
-                    return
-                except Exception as e:
-                    import traceback
-                    logger.error(f"❌ Failed to initialize OpenAI raw client: {e}")
-                    logger.debug(f"Full traceback: {traceback.format_exc()}")
-                    logger.info("💡 AI features will use fallback methods without OpenAI")
-                    self.client = None
-                    return
+            # Set API key in environment for compatibility
+            os.environ['OPENAI_API_KEY'] = api_key
+            
+            # Try different initialization methods based on available libraries
+            self.client = self._try_langchain_init(api_key) or self._try_openai_v1_init(api_key)
+            
+            if self.client:
+                logger.info("✅ OpenAI client initialized successfully")
             else:
-                logger.warning("⚠️ OpenAI API key not found. AI features will use fallback methods.")
-                logger.info("💡 Set OPENAI_API_KEY environment variable to enable AI features")
+                logger.warning("❌ Could not initialize OpenAI client with any available method")
                 
-        except ImportError:
-            logger.warning("⚠️ OpenAI libraries not available. Install with: pip install openai or langchain")
-            self.client = None
         except Exception as e:
             logger.error(f"❌ Failed to initialize OpenAI client: {e}")
             self.client = None
+    
+    def _try_langchain_init(self, api_key: str):
+        """Try to initialize using LangChain"""
+        try:
+            # Try modern langchain_openai first
+            from langchain_openai import ChatOpenAI
+            client = ChatOpenAI(
+                api_key=api_key,
+                model=Config.OPENAI_MODEL,
+                temperature=Config.OPENAI_TEMPERATURE,
+                max_tokens=Config.OPENAI_MAX_TOKENS
+            )
+            logger.info("📚 Using LangChain OpenAI client")
+            return client
+        except ImportError:
+            try:
+                # Fallback to legacy langchain.chat_models
+                from langchain.chat_models import ChatOpenAI
+                client = ChatOpenAI(
+                    api_key=api_key,
+                    model_name=Config.OPENAI_MODEL,
+                    temperature=Config.OPENAI_TEMPERATURE,
+                    max_tokens=Config.OPENAI_MAX_TOKENS
+                )
+                logger.info("📚 Using legacy LangChain OpenAI client")
+                return client
+            except ImportError:
+                logger.debug("LangChain not available for OpenAI")
+                return None
+        except Exception as e:
+            logger.debug(f"LangChain init failed: {e}")
+            return None
+    
+    def _try_openai_v1_init(self, api_key: str):
+        """Try to initialize using OpenAI v1.0+ client directly"""
+        try:
+            from openai import OpenAI
+            
+            # Create a wrapper that mimics LangChain's interface
+            class OpenAIDirectWrapper:
+                def __init__(self, api_key: str, model: str, temperature: float, max_tokens: int):
+                    # Initialize with minimal parameters for compatibility
+                    try:
+                        self._client = OpenAI(api_key=api_key)
+                    except TypeError as e:
+                        if 'proxies' in str(e):
+                            # Fallback: set API key via environment and initialize without parameters
+                            os.environ['OPENAI_API_KEY'] = api_key
+                            self._client = OpenAI()
+                        else:
+                            raise
+                    
+                    self.model = model
+                    self.temperature = temperature
+                    self.max_tokens = max_tokens
+                
+                def invoke(self, prompt: str):
+                    """Mimic LangChain's invoke method"""
+                    response = self._client.chat.completions.create(
+                        model=self.model,
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=self.temperature,
+                        max_tokens=self.max_tokens
+                    )
+                    
+                    # Create a response object that mimics LangChain's
+                    class SimpleResponse:
+                        def __init__(self, content):
+                            self.content = content
+                    
+                    return SimpleResponse(response.choices[0].message.content)
+            
+            client = OpenAIDirectWrapper(
+                api_key=api_key,
+                model=Config.OPENAI_MODEL,
+                temperature=Config.OPENAI_TEMPERATURE,
+                max_tokens=Config.OPENAI_MAX_TOKENS
+            )
+            logger.info("🔧 Using direct OpenAI client wrapper")
+            return client
+            
+        except ImportError:
+            logger.debug("OpenAI library not available")
+            return None
+        except Exception as e:
+            logger.debug(f"OpenAI direct init failed: {e}")
+            return None
     
     def is_available(self) -> bool:
         """Check if OpenAI client is available"""
