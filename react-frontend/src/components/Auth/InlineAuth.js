@@ -12,7 +12,7 @@ const InlineAuthPrompt = ({
   compact = false,
   showBenefits = true
 }) => {
-  const { signInWithGoogle, signInWithGitHub, loading } = useAuth();
+  const { signInWithGoogle, signInWithGitHub } = useAuth();
   const [authLoading, setAuthLoading] = useState(false);
   const [error, setError] = useState(null);
 

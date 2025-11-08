@@ -2,23 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getCachedSearchResults, discoverPapers, getCurrentSessionId } from '../../services/api';
 // import { AuthButton, ProtectedFeature } from '../Auth/InlineAuth'; // Currently unused
-import { SmartPaperActions } from './ProtectedPaperFeatures';
+// import { SmartPaperActions } from './ProtectedPaperFeatures'; // Currently unused
 import { useAuth } from '../../context/AuthContext';
 import PaperCard from '../PaperCard/PaperCard';
 import './PaperDiscovery.css';
 
-// Helper function to format authors list
-const formatAuthors = (authors, maxAuthors = 3) => {
-  if (!authors || authors.length === 0) return 'Unknown';
-  
-  if (authors.length <= maxAuthors) {
-    return authors.join(', ');
-  }
-  
-  const displayedAuthors = authors.slice(0, maxAuthors).join(', ');
-  const remainingCount = authors.length - maxAuthors;
-  return `${displayedAuthors} +${remainingCount} more`;
-};
+// Helper function to format authors list (currently unused but kept for future use)
+// const formatAuthors = (authors, maxAuthors = 3) => {
+//   if (!authors || authors.length === 0) return 'Unknown';
+//   
+//   if (authors.length <= maxAuthors) {
+//     return authors.join(', ');
+//   }
+//   
+//   const displayedAuthors = authors.slice(0, maxAuthors).join(', ');
+//   const remainingCount = authors.length - maxAuthors;
+//   return `${displayedAuthors} +${remainingCount} more`;
+// };
 
 const PaperDiscovery = () => {
   const navigate = useNavigate();
