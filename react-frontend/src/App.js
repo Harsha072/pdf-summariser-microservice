@@ -19,12 +19,19 @@ import { createSession, getCurrentSessionId } from './services/api';
 // Use environment variable for API URL
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
+console.log('🚀 App.js - Backend Configuration:', {
+  REACT_APP_API_URL: process.env.REACT_APP_API_URL,
+  API_BASE_URL: API_BASE_URL,
+  NODE_ENV: process.env.NODE_ENV
+});
+
 function App() {
   const [backendConnection, setBackendConnection] = useState('checking');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
     // Initialize session and check backend connection on startup
+    console.log('🔄 Initializing app with backend:', API_BASE_URL);
     initializeApp();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
