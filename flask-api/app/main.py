@@ -56,16 +56,33 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # Allow frontend domains (local + production)
+# Note: Vercel creates unique URLs for each deployment, so we allow all Vercel subdomains
 allowed_origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "https://scholar-quest-3fxidd3e3-harsha072s-projects.vercel.app",  # Vercel deployment
-    "https://pdf-summariser-microservice.vercel.app",  # Vercel production (if renamed)
-    "https://*.vercel.app"  # All Vercel preview deployments
+    "https://scholar-quest-3fxidd3e3-harsha072s-projects.vercel.app",
+    "https://scholar-quest-git-main-harsha072s-projects.vercel.app",
+    "https://scholar-quest-qb0x4it7x-harsha072s-projects.vercel.app",
+    "https://pdf-summariser-microservice.vercel.app",
 ]
 
+# Function to check if origin is allowed (supports Vercel domains)
+def is_allowed_origin(origin):
+    if not origin:
+        return False
+    
+    # Check exact matches first
+    if origin in allowed_origins:
+        return True
+    
+    # Allow all Vercel preview deployments
+    if origin.endswith('.vercel.app'):
+        return True
+    
+    return False
+
 CORS(app, 
-     origins=allowed_origins,
+     origins=is_allowed_origin,
      methods=['GET', 'POST', 'OPTIONS'], 
      allow_headers=['Content-Type', 'Authorization', 'X-Requested-With', 'X-Session-ID'],
      supports_credentials=True)
@@ -74,11 +91,14 @@ CORS(app,
 @app.before_request
 def handle_preflight():
     if request.method == "OPTIONS":
+        origin = request.headers.get('Origin')
         response = Response()
-        response.headers.add("Access-Control-Allow-Origin", request.headers.get('Origin', '*'))
+        if is_allowed_origin(origin):
+            response.headers.add("Access-Control-Allow-Origin", origin)
         response.headers.add('Access-Control-Allow-Headers', "Content-Type,Authorization,X-Requested-With,X-Session-ID")
         response.headers.add('Access-Control-Allow-Methods', "GET,POST,OPTIONS")
         response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
         return response
 
 # Firebase authentication decorator
