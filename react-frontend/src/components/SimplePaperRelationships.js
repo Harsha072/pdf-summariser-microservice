@@ -21,6 +21,7 @@ const SimplePaperRelationships = ({ paperId, onPaperClick, prefetchedGraphData }
         exploreRelationships();
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paperId, prefetchedGraphData]);
 
   const exploreRelationships = async () => {
@@ -62,16 +63,16 @@ const SimplePaperRelationships = ({ paperId, onPaperClick, prefetchedGraphData }
     return `${authors[0]} et al.`;
   };
 
-  const getInfluenceColor = (score) => {
-    if (score > 80) return '#e74c3c';  // High influence - red
-    if (score > 50) return '#f39c12';  // Medium influence - orange
-    if (score > 20) return '#3498db';  // Low influence - blue
-    return '#95a5a6';  // Minimal influence - gray
-  };
+  // const getInfluenceColor = (score) => {
+  //   if (score > 80) return '#e74c3c';  // High influence - red
+  //   if (score > 50) return '#f39c12';  // Medium influence - orange
+  //   if (score > 20) return '#3498db';  // Low influence - blue
+  //   return '#95a5a6';  // Minimal influence - gray
+  // };
 
-  const renderInsightIcon = (insight) => {
-    return ''; // Removed emoji icons
-  };
+  // const renderInsightIcon = (insight) => {
+  //   return ''; // Removed emoji icons
+  // };
 
   if (!paperId) {
     return (
@@ -128,7 +129,7 @@ const SimplePaperRelationships = ({ paperId, onPaperClick, prefetchedGraphData }
     );
   }
 
-  const { connections, insights, patterns, paper_info, data_status } = relationships;
+  const { connections, patterns, paper_info, data_status } = relationships;
 
   return (
     <div className="paper-relationships-explorer">
@@ -303,7 +304,7 @@ const SimpleVisualization = ({ data, onNodeClick, connections }) => {
     return <div className="viz-loading">Loading visualization...</div>;
   }
 
-  const { nodes, links, legend } = data;
+  const { nodes, links } = data;
 
   // Get full paper details from connections
   const getFullPaperDetails = (node) => {
@@ -428,9 +429,9 @@ const SimpleVisualization = ({ data, onNodeClick, connections }) => {
 
   // Helper function to create curved paths for better visual separation
   const getConnectionPath = (sourcePos, targetPos) => {
-    const dx = targetPos.x - sourcePos.x;
-    const dy = targetPos.y - sourcePos.y;
-    const dr = Math.sqrt(dx * dx + dy * dy) * 0.5; // Curve strength
+    // const dx = targetPos.x - sourcePos.x;
+    // const dy = targetPos.y - sourcePos.y;
+    // const dr = Math.sqrt(dx * dx + dy * dy) * 0.5; // Curve strength
     
     return `M${sourcePos.x},${sourcePos.y} Q${centerX},${centerY} ${targetPos.x},${targetPos.y}`;
   };
