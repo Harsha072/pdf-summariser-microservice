@@ -8,6 +8,9 @@ import { useAuth } from '../../context/AuthContext';
 import PaperCard from '../PaperCard/PaperCard';
 import './PaperDiscovery.css';
 
+// API Base URL from environment
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 // Helper function to format authors list (currently unused but kept for future use)
 // const formatAuthors = (authors, maxAuthors = 3) => {
 //   if (!authors || authors.length === 0) return 'Unknown';
@@ -217,7 +220,7 @@ const PaperDiscovery = () => {
         }
       }
       
-      const apiUrl = `http://localhost:5000/api/paper-relationships/${encodeURIComponent(paperId)}?max_connections=10`;
+      const apiUrl = `${API_BASE_URL}/api/paper-relationships/${encodeURIComponent(paperId)}?max_connections=10`;
       console.log('Calling API:', apiUrl);
       
       const response = await fetch(apiUrl, {
@@ -328,7 +331,7 @@ const PaperDiscovery = () => {
   //     formData.append('sources', selectedSources.join(','));
   //     formData.append('max_results', maxResults.toString());
 
-  //     const response = await fetch('http://localhost:5000/api/upload-paper', {
+  //     const response = await fetch(`${API_BASE_URL}/api/upload-paper`, {
   //       method: 'POST',
   //       body: formData
   //     });
@@ -358,7 +361,7 @@ const PaperDiscovery = () => {
 
   const downloadPaper = async (paperUrl, paperTitle) => {
     try {
-      const response = await fetch('http://localhost:5000/api/download-paper', {
+      const response = await fetch(`${API_BASE_URL}/api/download-paper`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -405,7 +408,7 @@ const PaperDiscovery = () => {
         }
       }
 
-      const response = await fetch(`http://localhost:5000${endpoint}`, {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'POST',
         headers: headers,
         body: JSON.stringify(payload)
