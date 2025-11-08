@@ -98,19 +98,31 @@ const authenticatedFetch = async (url, options = {}) => {
 // Create new session
 export const createSession = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/session/new`, {
+    const url = `${API_BASE_URL}/api/session/new`;
+    console.log('🔵 API Call: Creating new session');
+    console.log('📍 URL:', url);
+    console.log('🔧 Method: POST');
+    
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     });
+    
+    console.log('✅ Response Status:', response.status, response.statusText);
+    
     const data = await response.json();
+    console.log('📦 Response Data:', data);
+    
     if (data.success) {
       sessionId = data.session_id;
       localStorage.setItem('paper_discovery_session_id', sessionId);
+      console.log('✅ Session created:', sessionId);
       return sessionId;
     }
     throw new Error('Failed to create session');
   } catch (error) {
-    console.error('Session creation failed:', error);
+    console.error('❌ Session creation failed:', error);
+    console.error('📍 Backend URL:', API_BASE_URL);
     return null;
   }
 };
@@ -122,17 +134,31 @@ export const discoverPapers = async (query, sources = ['openalex'], maxResults =
     currentSessionId = await createSession();
   }
   
-  const response = await fetch(`${API_BASE_URL}/api/discover-papers`, {
+  const url = `${API_BASE_URL}/api/discover-papers`;
+  const payload = { 
+    query, 
+    sources, 
+    max_results: maxResults,
+    session_id: currentSessionId
+  };
+  
+  console.log('🔵 API Call: Discover Papers');
+  console.log('📍 URL:', url);
+  console.log('🔧 Method: POST');
+  console.log('📦 Payload:', payload);
+  console.log('🔑 Headers:', getAuthHeaders());
+  
+  const response = await fetch(url, {
     method: 'POST',
     headers: getAuthHeaders(),
-    body: JSON.stringify({ 
-      query, 
-      sources, 
-      max_results: maxResults,
-      session_id: currentSessionId
-    })
+    body: JSON.stringify(payload)
   });
-  return response.json();
+  
+  console.log('✅ Response Status:', response.status, response.statusText);
+  const data = await response.json();
+  console.log('📦 Response Data:', data);
+  
+  return data;
 };
 
 export const uploadPaper = async (file, sources = ['openalex'], maxResults = 10) => {
@@ -149,8 +175,17 @@ export const uploadPaper = async (file, sources = ['openalex'], maxResults = 10)
 };
 
 export const healthCheck = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/health`);
-  return response.json();
+  const url = `${API_BASE_URL}/api/health`;
+  console.log('🔵 API Call: Health Check');
+  console.log('📍 URL:', url);
+  
+  const response = await fetch(url);
+  console.log('✅ Health Check Response:', response.status, response.statusText);
+  
+  const data = await response.json();
+  console.log('📦 Health Data:', data);
+  
+  return data;
 };
 
 export const getAvailableSources = async () => {

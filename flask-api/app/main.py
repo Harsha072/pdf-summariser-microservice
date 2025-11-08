@@ -64,6 +64,20 @@ CORS(app,
      supports_credentials=True,
      max_age=3600)
 
+# Log all incoming requests
+@app.before_request
+def log_request_info():
+    """Log details about each incoming request"""
+    logger.info('=' * 80)
+    logger.info(f'🔵 Incoming Request: {request.method} {request.path}')
+    logger.info(f'🌐 Origin: {request.headers.get("Origin", "No Origin header")}')
+    logger.info(f'🔑 Authorization: {"Present" if request.headers.get("Authorization") else "Not present"}')
+    logger.info(f'📍 Remote Address: {request.remote_addr}')
+    logger.info(f'🔧 User Agent: {request.headers.get("User-Agent", "Unknown")[:100]}')
+    if request.method == 'POST':
+        logger.info(f'📦 Content-Type: {request.headers.get("Content-Type", "Not specified")}')
+    logger.info('=' * 80)
+
 # Add CORS headers to all responses for maximum compatibility
 @app.after_request
 def after_request(response):
@@ -72,7 +86,7 @@ def after_request(response):
     
     # Log origin for debugging
     if origin:
-        logger.info(f"Request from origin: {origin}")
+        logger.info(f"✅ Response to origin: {origin} - Status: {response.status_code}")
     
     # Allow localhost and all Vercel domains
     if (origin.startswith('http://localhost:') or 
@@ -82,9 +96,9 @@ def after_request(response):
         response.headers['Access-Control-Allow-Credentials'] = 'true'
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With,X-Session-ID,Accept,Origin'
         response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS,PATCH'
-        logger.info(f"CORS headers added for origin: {origin}")
+        logger.info(f"✅ CORS headers added for origin: {origin}")
     else:
-        logger.warning(f"Origin not allowed: {origin}")
+        logger.warning(f"❌ Origin not allowed: {origin}")
     
     return response
 
