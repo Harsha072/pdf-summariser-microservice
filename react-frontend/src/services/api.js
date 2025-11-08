@@ -4,6 +4,13 @@ import { auth } from '../config/firebase';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
+// Log the API URL being used for debugging
+console.log('🔗 API Configuration:', {
+  REACT_APP_API_URL: process.env.REACT_APP_API_URL,
+  API_BASE_URL: API_BASE_URL,
+  environment: process.env.NODE_ENV
+});
+
 // Session management
 let sessionId = null;
 
