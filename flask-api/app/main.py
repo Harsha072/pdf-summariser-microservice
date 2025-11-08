@@ -55,51 +55,31 @@ logger = logging.getLogger(__name__)
 # Initialize Flask app
 app = Flask(__name__)
 
-# Allow frontend domains (local + production)
-# Note: Vercel creates unique URLs for each deployment, so we allow all Vercel subdomains
-allowed_origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "https://scholar-quest-3fxidd3e3-harsha072s-projects.vercel.app",
-    "https://scholar-quest-git-main-harsha072s-projects.vercel.app",
-    "https://scholar-quest-qb0x4it7x-harsha072s-projects.vercel.app",
-    "https://pdf-summariser-microservice.vercel.app",
-]
-
-# Function to check if origin is allowed (supports Vercel domains)
-def is_allowed_origin(origin):
-    if not origin:
-        return False
-    
-    # Check exact matches first
-    if origin in allowed_origins:
-        return True
-    
-    # Allow all Vercel preview deployments
-    if origin.endswith('.vercel.app'):
-        return True
-    
-    return False
-
+# CORS configuration - Allow all Vercel domains
+# Using regex pattern for Vercel subdomains
 CORS(app, 
-     origins=is_allowed_origin,
-     methods=['GET', 'POST', 'OPTIONS'], 
-     allow_headers=['Content-Type', 'Authorization', 'X-Requested-With', 'X-Session-ID'],
-     supports_credentials=True)
+     origins=r"https://.*\.vercel\.app",  # Regex to match all Vercel deployments
+     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'], 
+     allow_headers=['Content-Type', 'Authorization', 'X-Requested-With', 'X-Session-ID', 'Accept', 'Origin'],
+     supports_credentials=True,
+     max_age=3600)
 
-# Handle preflight requests manually for extra compatibility
-@app.before_request
-def handle_preflight():
-    if request.method == "OPTIONS":
-        origin = request.headers.get('Origin')
-        response = Response()
-        if is_allowed_origin(origin):
-            response.headers.add("Access-Control-Allow-Origin", origin)
-        response.headers.add('Access-Control-Allow-Headers', "Content-Type,Authorization,X-Requested-With,X-Session-ID")
-        response.headers.add('Access-Control-Allow-Methods', "GET,POST,OPTIONS")
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
-        return response
+# Add CORS headers to all responses for maximum compatibility
+@app.after_request
+def after_request(response):
+    """Add CORS headers to all responses"""
+    origin = request.headers.get('Origin', '')
+    
+    # Allow localhost and all Vercel domains
+    if (origin.startswith('http://localhost:') or 
+        origin.startswith('http://127.0.0.1:') or 
+        origin.endswith('.vercel.app')):
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With,X-Session-ID,Accept,Origin'
+        response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS,PATCH'
+    
+    return response
 
 # Firebase authentication decorator
 def firebase_auth_required(f):
