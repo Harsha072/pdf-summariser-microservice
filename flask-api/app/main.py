@@ -70,6 +70,10 @@ def after_request(response):
     """Add CORS headers to all responses"""
     origin = request.headers.get('Origin', '')
     
+    # Log origin for debugging
+    if origin:
+        logger.info(f"Request from origin: {origin}")
+    
     # Allow localhost and all Vercel domains
     if (origin.startswith('http://localhost:') or 
         origin.startswith('http://127.0.0.1:') or 
@@ -78,6 +82,9 @@ def after_request(response):
         response.headers['Access-Control-Allow-Credentials'] = 'true'
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With,X-Session-ID,Accept,Origin'
         response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS,PATCH'
+        logger.info(f"CORS headers added for origin: {origin}")
+    else:
+        logger.warning(f"Origin not allowed: {origin}")
     
     return response
 
