@@ -1,5 +1,5 @@
 // Academic Paper Discovery Engine API Client
-import { v4 as uuidv4 } from 'uuid';
+// import { v4 as uuidv4 } from 'uuid';
 import { auth } from '../config/firebase';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -379,7 +379,7 @@ export const authAPI = {
 };
 
 // Default export for backward compatibility
-export default {
+const api = {
   discoverPapers,
   uploadPaper,
   healthCheck,
@@ -397,6 +397,8 @@ export default {
   // Firebase Authentication APIs
   authAPI
 };
+
+export default api;
 
 // Search History APIs
 export const getUserSearchHistory = async (limit = 20) => {
