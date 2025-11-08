@@ -54,8 +54,17 @@ logger = logging.getLogger(__name__)
 
 # Initialize Flask app
 app = Flask(__name__)
+
+# Allow frontend domains (local + production)
+allowed_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://pdf-summariser-microservice.vercel.app",  # Vercel production
+    "https://pdf-summariser-microservice-*.vercel.app"  # Vercel preview deployments
+]
+
 CORS(app, 
-     origins=["http://localhost:3000", "http://127.0.0.1:3000"], 
+     origins=allowed_origins,
      methods=['GET', 'POST', 'OPTIONS'], 
      allow_headers=['Content-Type', 'Authorization', 'X-Requested-With', 'X-Session-ID'],
      supports_credentials=True)

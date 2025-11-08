@@ -15,6 +15,7 @@ const SavedPapers = () => {
 
   useEffect(() => {
     fetchBookmarks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const fetchBookmarks = async () => {
@@ -99,11 +100,6 @@ const SavedPapers = () => {
       console.error('Error removing bookmark:', err);
       addNotification('Failed to remove bookmark', 'error');
     }
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return 'Unknown';
-    return new Date(dateString).toLocaleDateString();
   };
 
   if (loading) {

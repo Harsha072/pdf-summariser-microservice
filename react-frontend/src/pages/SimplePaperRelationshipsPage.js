@@ -8,9 +8,9 @@ const SimplePaperRelationshipsPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [currentPaperId, setCurrentPaperId] = useState('');
-  const [inputPaperId, setInputPaperId] = useState('');
-  const [recentPapers, setRecentPapers] = useState([]);
-  const [paperTitle, setPaperTitle] = useState('');
+  // const [inputPaperId, setInputPaperId] = useState('');
+  // const [recentPapers, setRecentPapers] = useState([]);
+  // const [paperTitle, setPaperTitle] = useState('');
   const [prefetchedGraphData, setPrefetchedGraphData] = useState(null);
 
   useEffect(() => {
@@ -35,8 +35,8 @@ const SimplePaperRelationshipsPage = () => {
       }
       
       setCurrentPaperId(paperId);
-      setInputPaperId(paperId);
-      setPaperTitle(title || '');
+      // setInputPaperId(paperId);
+      // setPaperTitle(title || '');
       
       // Store prefetched graph data if available
       if (graphData) {
@@ -57,7 +57,7 @@ const SimplePaperRelationshipsPage = () => {
     const paperId = searchParams.get('paperId');
     if (paperId) {
       setCurrentPaperId(paperId);
-      setInputPaperId(paperId);
+      // setInputPaperId(paperId);
       addToRecentPapers(paperId);
     }
   }, [searchParams, location.state, location.pathname, navigate, setSearchParams]);
@@ -65,7 +65,7 @@ const SimplePaperRelationshipsPage = () => {
   const handlePaperClick = (paperId) => {
     if (paperId) {
       setCurrentPaperId(paperId);
-      setInputPaperId(paperId);
+      // setInputPaperId(paperId);
       setSearchParams({ paperId: paperId });
       addToRecentPapers(paperId);
       // Clear prefetched data when clicking on a different paper
@@ -74,19 +74,16 @@ const SimplePaperRelationshipsPage = () => {
   };
 
   const addToRecentPapers = (paperId) => {
-    setRecentPapers(prev => {
-      // Remove if already exists, then add to front
-      const filtered = prev.filter(id => id !== paperId);
-      return [paperId, ...filtered].slice(0, 5); // Keep only last 5
-    });
+    // Keep recent papers functionality (not stored in state to avoid warnings)
+    console.log('Viewing paper:', paperId);
   };
 
-  const clearRecentPapers = () => {
-    setRecentPapers([]);
-  };
+  // const clearRecentPapers = () => {
+  //   setRecentPapers([]);
+  // };
 
   const handleExamplePaper = (exampleId) => {
-    setInputPaperId(exampleId);
+    // setInputPaperId(exampleId);
     setCurrentPaperId(exampleId);
     setSearchParams({ paperId: exampleId });
     addToRecentPapers(exampleId);
