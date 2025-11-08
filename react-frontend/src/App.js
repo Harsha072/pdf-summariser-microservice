@@ -32,7 +32,7 @@ function App() {
       let sessionId = getCurrentSessionId();
       if (!sessionId) {
         sessionId = await createSession();
-        console.log('Created new session:', sessionId);
+        console.log('Created a new session:', sessionId);
       } else {
         console.log('Using existing session:', sessionId);
       }

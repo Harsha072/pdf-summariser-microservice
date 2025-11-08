@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { getCachedSearchResults, discoverPapers, getCurrentSessionId } from '../../services/api';
+import { getCachedSearchResults, getCurrentSessionId } from '../../services/api';
+// import { discoverPapers } from '../../services/api'; // Unused - for future query-based search feature
 // import { AuthButton, ProtectedFeature } from '../Auth/InlineAuth'; // Currently unused
 // import { SmartPaperActions } from './ProtectedPaperFeatures'; // Currently unused
 import { useAuth } from '../../context/AuthContext';
@@ -27,8 +28,9 @@ const PaperDiscovery = () => {
   const [searchQuery, setSearchQuery] = useState('');
   // const [uploadedFile, setUploadedFile] = useState(null); // Unused - file upload feature
   const [discoveredPapers, setDiscoveredPapers] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedSources, setSelectedSources] = useState(['openalex']);
+  // eslint-disable-next-line no-unused-vars
+  const [isLoading, setIsLoading] = useState(false); // isLoading is used in JSX, setIsLoading for future features
+  // const [selectedSources, setSelectedSources] = useState(['openalex']); // Unused - for future multi-source feature
   const [maxResults, setMaxResults] = useState(10);
   const [error, setError] = useState('');
   const [cacheStatus, setCacheStatus] = useState('');
@@ -53,17 +55,18 @@ const PaperDiscovery = () => {
   useEffect(() => {
     const urlParams = new URLSearchParams(location.search);
     const queryParam = urlParams.get('q');
-    const sourcesParam = urlParams.get('sources');
+    // const sourcesParam = urlParams.get('sources'); // Unused - for future multi-source feature
     const fromParam = urlParams.get('from');
     
     if (queryParam && fromParam === 'history') {
       console.log('Repeating search from history:', queryParam);
       setSearchQuery(queryParam);
       
-      if (sourcesParam) {
-        const sources = sourcesParam.split(',');
-        setSelectedSources(sources);
-      }
+      // Future feature: Multi-source support
+      // if (sourcesParam) {
+      //   const sources = sourcesParam.split(',');
+      //   setSelectedSources(sources);
+      // }
       
       // Load cached results for this query instead of making a new search
       loadCachedResultsForQuery(queryParam);
@@ -89,7 +92,7 @@ const PaperDiscovery = () => {
         if (matchingResult) {
           console.log("Found matching cached result");
           setDiscoveredPapers(matchingResult.results?.papers || []);
-          setSelectedSources(matchingResult.sources || ['openalex']);
+          // setSelectedSources(matchingResult.sources || ['openalex']); // Unused - for future multi-source feature
           setMaxResults(matchingResult.max_results || 10);
           setCacheStatus(`Loaded from cache (${new Date(matchingResult.timestamp).toLocaleTimeString()})`);
         } else {
@@ -122,7 +125,7 @@ const PaperDiscovery = () => {
             
             setSearchQuery(mostRecent.query || '');
             setDiscoveredPapers(mostRecent.results?.papers || []);
-            setSelectedSources(mostRecent.sources || ['openalex']);
+            // setSelectedSources(mostRecent.sources || ['openalex']); // Unused - for future multi-source feature
             setMaxResults(mostRecent.max_results || 10);
             setCacheStatus(`Loaded cached results from ${new Date(mostRecent.timestamp).toLocaleTimeString()}`);
           } else if (cachedData.result) {
