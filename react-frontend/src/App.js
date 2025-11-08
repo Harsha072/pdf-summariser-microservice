@@ -16,6 +16,9 @@ import { NotificationProvider } from './context/NotificationContext';
 import { AuthProvider } from './context/AuthContext';
 import { createSession, getCurrentSessionId } from './services/api';
 
+// Use environment variable for API URL
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 function App() {
   const [backendConnection, setBackendConnection] = useState('checking');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -47,7 +50,7 @@ function App() {
 
   const checkBackendConnection = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/health');
+      const response = await fetch(`${API_BASE_URL}/api/health`);
       if (response.ok) {
         setBackendConnection('connected');
       } else {

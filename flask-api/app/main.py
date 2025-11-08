@@ -59,8 +59,9 @@ app = Flask(__name__)
 allowed_origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "https://pdf-summariser-microservice.vercel.app",  # Vercel production
-    "https://pdf-summariser-microservice-*.vercel.app"  # Vercel preview deployments
+    "https://scholar-quest-3fxidd3e3-harsha072s-projects.vercel.app",  # Vercel deployment
+    "https://pdf-summariser-microservice.vercel.app",  # Vercel production (if renamed)
+    "https://*.vercel.app"  # All Vercel preview deployments
 ]
 
 CORS(app, 

@@ -6,6 +6,9 @@ import PaperCard from '../components/PaperCard/PaperCard';
 import '../components/common.css';
 import '../components/PaperDiscovery/PaperDiscovery.css';
 
+// API Base URL from environment
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 const SavedPapers = () => {
   const { user, refreshToken } = useAuth();
   const { addNotification } = useNotification();
@@ -40,7 +43,7 @@ const SavedPapers = () => {
         }
       }
 
-      const response = await fetch('http://localhost:5000/api/bookmarks', {
+      const response = await fetch(`${API_BASE_URL}/api/bookmarks`, {
         method: 'GET',
         headers: headers
       });
@@ -82,7 +85,7 @@ const SavedPapers = () => {
         }
       }
 
-      const response = await fetch('http://localhost:5000/api/bookmarks/remove', {
+      const response = await fetch(`${API_BASE_URL}/api/bookmarks/remove`, {
         method: 'POST',
         headers: headers,
         body: JSON.stringify({ paper_id: paperId })
