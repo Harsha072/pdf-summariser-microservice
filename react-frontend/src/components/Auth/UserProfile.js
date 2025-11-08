@@ -4,7 +4,7 @@ import LoginModal from './LoginModal';
 import './UserProfile.css';
 
 const UserProfile = () => {
-  const { user, logout, isAuthenticated, isAnonymous } = useAuth();
+  const { user, logout, isAnonymous } = useAuth();
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
 

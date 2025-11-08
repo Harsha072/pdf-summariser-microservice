@@ -2,30 +2,30 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getCachedSearchResults, discoverPapers, getCurrentSessionId } from '../../services/api';
 // import { AuthButton, ProtectedFeature } from '../Auth/InlineAuth'; // Currently unused
-import { SmartPaperActions } from './ProtectedPaperFeatures';
+// import { SmartPaperActions } from './ProtectedPaperFeatures'; // Currently unused
 import { useAuth } from '../../context/AuthContext';
 import PaperCard from '../PaperCard/PaperCard';
 import './PaperDiscovery.css';
 
-// Helper function to format authors list
-const formatAuthors = (authors, maxAuthors = 3) => {
-  if (!authors || authors.length === 0) return 'Unknown';
-  
-  if (authors.length <= maxAuthors) {
-    return authors.join(', ');
-  }
-  
-  const displayedAuthors = authors.slice(0, maxAuthors).join(', ');
-  const remainingCount = authors.length - maxAuthors;
-  return `${displayedAuthors} +${remainingCount} more`;
-};
+// Helper function to format authors list (currently unused but kept for future use)
+// const formatAuthors = (authors, maxAuthors = 3) => {
+//   if (!authors || authors.length === 0) return 'Unknown';
+//   
+//   if (authors.length <= maxAuthors) {
+//     return authors.join(', ');
+//   }
+//   
+//   const displayedAuthors = authors.slice(0, maxAuthors).join(', ');
+//   const remainingCount = authors.length - maxAuthors;
+//   return `${displayedAuthors} +${remainingCount} more`;
+// };
 
 const PaperDiscovery = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { isAuthenticated, user, refreshToken } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
-  const [uploadedFile, setUploadedFile] = useState(null);
+  // const [uploadedFile, setUploadedFile] = useState(null); // Unused - file upload feature
   const [discoveredPapers, setDiscoveredPapers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedSources, setSelectedSources] = useState(['openalex']);
@@ -35,10 +35,11 @@ const PaperDiscovery = () => {
   const [bookmarkStatus, setBookmarkStatus] = useState({}); // Track bookmark status for papers
   const [buildingGraphFor, setBuildingGraphFor] = useState(null); // Track which paper is building graph
 
-  const availableSources = [
-    { id: 'openalex', name: 'OpenAlex', description: 'Open catalog of scholarly papers with comprehensive metadata' },
-    { id: 'google_scholar', name: 'Google Scholar', description: 'Web search for scholarly literature' }
-  ];
+  // Available sources - currently only using OpenAlex
+  // const availableSources = [
+  //   { id: 'openalex', name: 'OpenAlex', description: 'Open catalog of scholarly papers with comprehensive metadata' },
+  //   { id: 'google_scholar', name: 'Google Scholar', description: 'Web search for scholarly literature' }
+  // ];
 
   const exampleQueries = [
     "How can machine learning improve medical diagnosis accuracy?",
@@ -163,11 +164,10 @@ const PaperDiscovery = () => {
     // If we still don't have a work ID but have a URL, try to extract it
     if (!paperId && paper.url && paper.url.includes('openalex.org/W')) {
       paperId = paper.url.split('/W')[1] || paper.url.split('W')[1];
-      if (paperId.startsWith('W')) {
-        paperId = paperId; // Keep the W prefix for OpenAlex IDs
-      } else {
+      if (!paperId.startsWith('W')) {
         paperId = 'W' + paperId; // Add W prefix if missing
       }
+      // paperId already has W prefix, no need to reassign
       console.log('Extracted paperId from URL:', paperId);
     }
     
@@ -176,9 +176,8 @@ const PaperDiscovery = () => {
       paperId = paper.paper_id || paper.id;
       if (paperId && paperId.includes('openalex.org/W')) {
         paperId = paperId.split('/W')[1] || paperId.split('W')[1];
-      } else if (paperId && paperId.startsWith('W')) {
-        paperId = paperId; // Keep as is for OpenAlex work IDs
       }
+      // If paperId starts with W, it's already correct, no reassignment needed
       console.log('Fallback paperId:', paperId);
     }
     
@@ -273,83 +272,86 @@ const PaperDiscovery = () => {
     }
   };
 
-  const handleSearchByQuery = async () => {
-    if (!searchQuery.trim()) {
-      setError('Please enter a research query');
-      return;
-    }
+  // Unused function - kept for future file upload feature
+  // const handleSearchByQuery = async () => {
+  //   if (!searchQuery.trim()) {
+  //     setError('Please enter a research query');
+  //     return;
+  //   }
 
-    setIsLoading(true);
-    setError('');
+  //   setIsLoading(true);
+  //   setError('');
 
-    try {
-      const data = await discoverPapers(searchQuery, selectedSources, maxResults);
+  //   try {
+  //     const data = await discoverPapers(searchQuery, selectedSources, maxResults);
 
-      if (data.success) {
-        setDiscoveredPapers(data.papers);
-        // Update cache status
-        if (data.from_cache) {
-          setCacheStatus(`Results loaded from cache (${new Date(data.cache_timestamp).toLocaleTimeString()})`);
-        } else {
-          setCacheStatus('Fresh results - now cached for future use');
-        }
-      } else {
-        setError(data.error || 'Failed to discover papers');
-        setCacheStatus('');
-      }
-    } catch (err) {
-      setError('Failed to connect to the discovery engine');
-      setCacheStatus('');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  //     if (data.success) {
+  //       setDiscoveredPapers(data.papers);
+  //       // Update cache status
+  //       if (data.from_cache) {
+  //         setCacheStatus(`Results loaded from cache (${new Date(data.cache_timestamp).toLocaleTimeString()})`);
+  //       } else {
+  //         setCacheStatus('Fresh results - now cached for future use');
+  //       }
+  //     } else {
+  //       setError(data.error || 'Failed to discover papers');
+  //       setCacheStatus('');
+  //     }
+  //   } catch (err) {
+  //     setError('Failed to connect to the discovery engine');
+  //     setCacheStatus('');
+  //   } finally {
+  //     setIsLoading(false);
+  //   }
+  // };
 
-  const handleFileUpload = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
+  // Unused function - kept for future file upload feature
+  // const handleFileUpload = async (event) => {
+  //   const file = event.target.files[0];
+  //   if (!file) return;
 
-    if (!file.name.toLowerCase().endsWith('.pdf')) {
-      setError('Please upload a PDF file');
-      return;
-    }
+  //   if (!file.name.toLowerCase().endsWith('.pdf')) {
+  //     setError('Please upload a PDF file');
+  //     return;
+  //   }
 
-    setUploadedFile(file);
-    setIsLoading(true);
-    setError('');
+  //   setUploadedFile(file);
+  //   setIsLoading(true);
+  //   setError('');
 
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('sources', selectedSources.join(','));
-      formData.append('max_results', maxResults.toString());
+  //   try {
+  //     const formData = new FormData();
+  //     formData.append('file', file);
+  //     formData.append('sources', selectedSources.join(','));
+  //     formData.append('max_results', maxResults.toString());
 
-      const response = await fetch('http://localhost:5000/api/upload-paper', {
-        method: 'POST',
-        body: formData
-      });
+  //     const response = await fetch('http://localhost:5000/api/upload-paper', {
+  //       method: 'POST',
+  //       body: formData
+  //     });
 
-      const data = await response.json();
+  //     const data = await response.json();
 
-      if (data.success) {
-        setDiscoveredPapers(data.similar_papers.papers || []);
-      } else {
-        setError(data.error || 'Failed to analyze uploaded paper');
-      }
-    } catch (err) {
-      setError('Failed to upload and analyze paper');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  //     if (data.success) {
+  //       setDiscoveredPapers(data.similar_papers.papers || []);
+  //     } else {
+  //       setError(data.error || 'Failed to analyze uploaded paper');
+  //     }
+  //   } catch (err) {
+  //     setError('Failed to upload and analyze paper');
+  //   } finally {
+  //     setIsLoading(false);
+  //   }
+  // };
 
-  const handleSourceToggle = (sourceId) => {
-    setSelectedSources(prev => 
-      prev.includes(sourceId) 
-        ? prev.filter(id => id !== sourceId)
-        : [...prev, sourceId]
-    );
-  };
+  // Unused function - kept for future multi-source feature
+  // const handleSourceToggle = (sourceId) => {
+  //   setSelectedSources(prev => 
+  //     prev.includes(sourceId) 
+  //       ? prev.filter(id => id !== sourceId)
+  //       : [...prev, sourceId]
+  //   );
+  // };
 
   const downloadPaper = async (paperUrl, paperTitle) => {
     try {
