@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getCachedSearchResults, getCurrentSessionId } from '../../services/api';
 // import { discoverPapers } from '../../services/api'; // Unused - for future query-based search feature
@@ -56,33 +56,8 @@ const PaperDiscovery = () => {
     "How can renewable energy systems be optimized for efficiency?"
   ];
 
-  // Handle URL parameters for search from history
-  useEffect(() => {
-    const urlParams = new URLSearchParams(location.search);
-    const queryParam = urlParams.get('q');
-    // const sourcesParam = urlParams.get('sources'); // Unused - for future multi-source feature
-    const fromParam = urlParams.get('from');
-    
-    if (queryParam && fromParam === 'history') {
-      console.log('Repeating search from history:', queryParam);
-      setSearchQuery(queryParam);
-      
-      // Future feature: Multi-source support
-      // if (sourcesParam) {
-      //   const sources = sourcesParam.split(',');
-      //   setSelectedSources(sources);
-      // }
-      
-      // Load cached results for this query instead of making a new search
-      loadCachedResultsForQuery(queryParam);
-      
-      // Clear URL parameters
-      navigate('/search', { replace: true });
-    }
-  }, [location.search, navigate]);
-
   // Load cached results for a specific query
-  const loadCachedResultsForQuery = async (query) => {
+  const loadCachedResultsForQuery = useCallback(async (query) => {
     try {
       console.log("Loading cached results for query:", query);
       const cachedData = await getCachedSearchResults();
@@ -108,7 +83,32 @@ const PaperDiscovery = () => {
     } catch (error) {
       console.error('Failed to load cached results for query:', error);
     }
-  };
+  }, []);
+
+  // Handle URL parameters for search from history
+  useEffect(() => {
+    const urlParams = new URLSearchParams(location.search);
+    const queryParam = urlParams.get('q');
+    // const sourcesParam = urlParams.get('sources'); // Unused - for future multi-source feature
+    const fromParam = urlParams.get('from');
+    
+    if (queryParam && fromParam === 'history') {
+      console.log('Repeating search from history:', queryParam);
+      setSearchQuery(queryParam);
+      
+      // Future feature: Multi-source support
+      // if (sourcesParam) {
+      //   const sources = sourcesParam.split(',');
+      //   setSelectedSources(sources);
+      // }
+      
+      // Load cached results for this query instead of making a new search
+      loadCachedResultsForQuery(queryParam);
+      
+      // Clear URL parameters
+      navigate('/search', { replace: true });
+    }
+  }, [location.search, navigate, loadCachedResultsForQuery]);
 
   // Check for cached results on page load
   useEffect(() => {
