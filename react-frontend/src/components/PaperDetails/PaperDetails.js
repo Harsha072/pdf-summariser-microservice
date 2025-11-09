@@ -62,17 +62,6 @@ const PaperDetails = () => {
     return '#dc3545';
   };
 
-  if (isLoading) {
-    return (
-      <div className="paper-details">
-        <div className="loading-container">
-          <div className="spinner"></div>
-          <p>Generating AI analysis...</p>
-        </div>
-      </div>
-    );
-  }
-
   if (error) {
     return (
       <div className="paper-details">
@@ -150,17 +139,23 @@ const PaperDetails = () => {
           </div>
 
           <div className="paper-scores">
-            <div className="score-item">
+            <div className="score-item circular">
+              <div className="circular-score relevance">
+                <div className="score-circle">
+                  <span className="score-number">{Math.round(paper.relevance_score || 0)}</span>
+                  <span className="score-unit">%</span>
+                </div>
+              </div>
               <span className="score-label">Relevance Score</span>
-              <span className="score-value relevance">
-                {Math.round(paper.relevance_score || 0)}%
-              </span>
             </div>
-            <div className="score-item">
+            <div className="score-item circular">
+              <div className="circular-score impact" style={{borderColor: getImpactColor(analysis.impact_score)}}>
+                <div className="score-circle">
+                  <span className="score-number">{analysis.impact_score}</span>
+                  <span className="score-unit">/100</span>
+                </div>
+              </div>
               <span className="score-label">Impact Score</span>
-              <span className="score-value impact" style={{color: getImpactColor(analysis.impact_score)}}>
-                {analysis.impact_score}/100
-              </span>
             </div>
             <div className="score-item">
               <span className="score-label">Difficulty</span>

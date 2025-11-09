@@ -39,6 +39,8 @@ const PaperDiscovery = () => {
   const [cacheStatus, setCacheStatus] = useState('');
   const [bookmarkStatus, setBookmarkStatus] = useState({}); // Track bookmark status for papers
   const [buildingGraphFor, setBuildingGraphFor] = useState(null); // Track which paper is building graph
+  const [isGeneratingAnalysis, setIsGeneratingAnalysis] = useState(false); // Track analysis generation
+  const [analysisLoadingText, setAnalysisLoadingText] = useState(''); // Loading text for analysis/graph
 
   // Available sources - currently only using OpenAlex
   // const availableSources = [
@@ -152,16 +154,27 @@ const PaperDiscovery = () => {
   }, []);
 
   const handleViewDetails = (paper, index) => {
+    // Show loading overlay
+    setIsGeneratingAnalysis(true);
+    setAnalysisLoadingText('Generating AI analysis...');
+    
     // Store paper data in localStorage for the details page
     const paperId = `paper_${Date.now()}_${index}`;
     localStorage.setItem(`paper_${paperId}`, JSON.stringify(paper));
     
-    // Navigate to details page
-    navigate(`/paper-details/${paperId}`);
+    // Small delay for better UX, then navigate
+    setTimeout(() => {
+      navigate(`/paper-details/${paperId}`);
+      setIsGeneratingAnalysis(false);
+    }, 300);
   };
 
   const handleBuildGraph = async (paper) => {
     console.log('handleBuildGraph called with paper:', paper);
+    
+    // Show loading overlay
+    setIsGeneratingAnalysis(true);
+    setAnalysisLoadingText('Building citation graph...');
     
     // Use OpenAlex work ID if available, otherwise fall back to existing logic
     let paperId = paper.openalex_work_id || paper.paper_id || paper.id;
@@ -275,6 +288,7 @@ const PaperDiscovery = () => {
       });
     } finally {
       setBuildingGraphFor(null);
+      setIsGeneratingAnalysis(false);
     }
   };
 
@@ -442,6 +456,16 @@ const PaperDiscovery = () => {
 
   return (
     <div className="paper-discovery">
+      {/* Loading Overlay for Analysis/Graph */}
+      {isGeneratingAnalysis && (
+        <div className="loading-overlay">
+          <div className="loading-spinner-container">
+            <div className="loading-spinner"></div>
+            <p className="loading-text">{analysisLoadingText}</p>
+          </div>
+        </div>
+      )}
+
       <div className="discovery-controls">
         <div className="compact-search-section">
           <div className="compact-search-box">
