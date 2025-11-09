@@ -8,7 +8,6 @@ const PaperDetails = () => {
   const navigate = useNavigate();
   const [paper, setPaper] = useState(null);
   const [analysis, setAnalysis] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -20,13 +19,11 @@ const PaperDetails = () => {
       fetchPaperAnalysis(paperData);
     } else {
       setError('Paper data not found');
-      setIsLoading(false);
     }
   }, [paperId]);
 
   const fetchPaperAnalysis = async (paperData) => {
     try {
-      setIsLoading(true);
       const response = await getPaperDetails(paperData);
       
       if (response.success) {
@@ -37,8 +34,6 @@ const PaperDetails = () => {
     } catch (error) {
       console.error('Error fetching paper analysis:', error);
       setError('Failed to load paper analysis');
-    } finally {
-      setIsLoading(false);
     }
   };
 

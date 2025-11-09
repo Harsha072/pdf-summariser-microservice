@@ -28,13 +28,6 @@ console.log('🚀 App.js - Backend Configuration:', {
 function App() {
   const [backendConnection, setBackendConnection] = useState('checking');
 
-  useEffect(() => {
-    // Initialize session and check backend connection on startup
-    console.log('🔄 Initializing app with backend:', API_BASE_URL);
-    initializeApp();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const initializeApp = async () => {
     try {
       // Initialize session if not exists
@@ -67,6 +60,12 @@ function App() {
       setBackendConnection('disconnected');
     }
   };
+
+  useEffect(() => {
+    // Initialize session and check backend connection on startup
+    console.log('🔄 Initializing app with backend:', API_BASE_URL);
+    initializeApp();
+  }, []);
 
   return (
     <Router>
