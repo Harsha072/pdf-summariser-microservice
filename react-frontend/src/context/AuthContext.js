@@ -88,7 +88,10 @@ export const AuthProvider = ({ children }) => {
             displayName: user.displayName,
             photoURL: user.photoURL,
             isAnonymous: user.isAnonymous,
-            providerId: user.providerData[0]?.providerId || 'anonymous'
+            providerId: user.providerData[0]?.providerId || 'anonymous',
+            emailVerified: user.emailVerified,
+            createdAt: user.metadata.creationTime,
+            lastLoginAt: user.metadata.lastSignInTime
           });
 
           console.log(`User authenticated: ${user.email || 'Anonymous'}`);

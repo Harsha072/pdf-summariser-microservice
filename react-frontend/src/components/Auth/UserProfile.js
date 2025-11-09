@@ -112,21 +112,7 @@ const UserProfile = () => {
                   <div className="dropdown-divider"></div>
                 </>
               ) : (
-                <>
-                  <a href="/profile" className="dropdown-item">
-                    <i className="fas fa-user-cog"></i>
-                    <span>Profile & Settings</span>
-                  </a>
-                  <a href="/history" className="dropdown-item">
-                    <i className="fas fa-history"></i>
-                    <span>Search History</span>
-                  </a>
-                  <a href="/saved" className="dropdown-item">
-                    <i className="fas fa-bookmark"></i>
-                    <span>Saved Papers</span>
-                  </a>
-                  <div className="dropdown-divider"></div>
-                </>
+                <div className="dropdown-divider"></div>
               )}
               
               <a href="/help" className="dropdown-item">

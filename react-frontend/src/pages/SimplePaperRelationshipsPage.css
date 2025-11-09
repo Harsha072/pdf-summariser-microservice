@@ -332,6 +332,46 @@
   font-weight: 600;
 }
 
+.main-content {
+  margin: 0 auto;
+  max-width: 1400px;
+}
+
+/* Paper Relations Header */
+.paper-relations-header {
+  background: white;
+  border-radius: 12px;
+  padding: 20px 30px;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.back-button {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.back-button:hover {
+  background: #218838;
+  transform: translateY(-1px);
+}
+
+.back-button:active {
+  background: #1e7e34;
+  transform: translateY(0);
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .paper-relationships-page {
