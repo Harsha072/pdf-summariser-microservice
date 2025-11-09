@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import './App.css';
 import Header from './components/Header/Header';
@@ -28,7 +28,21 @@ console.log('🚀 App.js - Backend Configuration:', {
 function App() {
   const [backendConnection, setBackendConnection] = useState('checking');
 
-  const initializeApp = async () => {
+  const checkBackendConnection = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/health`);
+      if (response.ok) {
+        setBackendConnection('connected');
+      } else {
+        setBackendConnection('disconnected');
+      }
+    } catch (error) {
+      console.error('Backend connection error:', error);
+      setBackendConnection('disconnected');
+    }
+  }, []);
+
+  const initializeApp = useCallback(async () => {
     try {
       // Initialize session if not exists
       let sessionId = getCurrentSessionId();
@@ -45,27 +59,13 @@ function App() {
       console.error('App initialization error:', error);
       setBackendConnection('disconnected');
     }
-  };
-
-  const checkBackendConnection = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/health`);
-      if (response.ok) {
-        setBackendConnection('connected');
-      } else {
-        setBackendConnection('disconnected');
-      }
-    } catch (error) {
-      console.error('Backend connection error:', error);
-      setBackendConnection('disconnected');
-    }
-  };
+  }, [checkBackendConnection]);
 
   useEffect(() => {
     // Initialize session and check backend connection on startup
     console.log('🔄 Initializing app with backend:', API_BASE_URL);
     initializeApp();
-  }, []);
+  }, [initializeApp]);
 
   return (
     <Router>
