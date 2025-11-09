@@ -443,11 +443,29 @@ const PaperDiscovery = () => {
   return (
     <div className="paper-discovery">
       <div className="discovery-controls">
-
-        <div className="options-section">
-          <div className="max-results">
+        <div className="compact-search-section">
+          <div className="compact-search-box">
+            <svg className="search-icon" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search papers..."
+              className="compact-search-input"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' && searchQuery.trim()) {
+                  // Call the same search function as homepage
+                  window.location.href = `/?q=${encodeURIComponent(searchQuery.trim())}`;
+                }
+              }}
+            />
+          </div>
+          
+          <div className="max-results-compact">
             <label>
-              Max Results:
+              Max:
               <select 
                 value={maxResults} 
                 onChange={(e) => setMaxResults(parseInt(e.target.value))}

@@ -75,28 +75,6 @@ const PaperCard = ({
             </button>
           )}
           
-          {paper.url && (
-            <a 
-              href={paper.url} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="action-btn view-btn"
-            >
-              <i className="fas fa-external-link-alt"></i>
-              Open
-            </a>
-          )}
-          
-          {paper.pdf_url && onDownloadPaper && (
-            <button 
-              onClick={() => onDownloadPaper(paper.url || paper.pdf_url, paper.title)}
-              className="action-btn download-btn"
-            >
-              <i className="fas fa-download"></i>
-              Download
-            </button>
-          )}
-          
           {onBuildGraph && (
             <button 
               onClick={() => onBuildGraph(paper)}

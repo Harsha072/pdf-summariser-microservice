@@ -84,7 +84,7 @@ def after_request(response):
     """Add CORS headers to all responses"""
     origin = request.headers.get('Origin', '')
     
-    # Log origin for debugging
+    # Log origin for debugging (skip health checks and requests without origin)
     if origin:
         logger.info(f"✅ Response to origin: {origin} - Status: {response.status_code}")
     
@@ -97,7 +97,7 @@ def after_request(response):
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With,X-Session-ID,Accept,Origin'
         response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS,PATCH'
         logger.info(f"✅ CORS headers added for origin: {origin}")
-    else:
+    elif origin:  # Only warn if there's an origin header that's not allowed
         logger.warning(f"❌ Origin not allowed: {origin}")
     
     return response

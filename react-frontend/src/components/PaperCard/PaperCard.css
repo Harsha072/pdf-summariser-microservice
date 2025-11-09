@@ -1,2 +1,76 @@
 /* PaperCard styles - imported from PaperDiscovery.css */
 @import '../PaperDiscovery/PaperDiscovery.css';
+
+/* Action Buttons */
+.paper-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  color: white;
+  background: #28a745;
+}
+
+.action-btn i {
+  font-size: 14px;
+}
+
+.action-btn:hover {
+  background: #218838;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
+}
+
+.action-btn:active {
+  transform: translateY(0);
+  background: #1e7e34;
+}
+
+.action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+  background: #28a745;
+}
+
+/* View Details Button */
+.view-btn {
+  background: #28a745;
+}
+
+.view-btn:hover {
+  background: #218838;
+}
+
+.view-btn:active {
+  background: #1e7e34;
+}
+
+/* Build Graph Button */
+.graph-btn {
+  background: #28a745;
+}
+
+.graph-btn:hover {
+  background: #218838;
+}
+
+.graph-btn:active {
+  background: #1e7e34;
+}

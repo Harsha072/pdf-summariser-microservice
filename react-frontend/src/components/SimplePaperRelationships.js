@@ -9,11 +9,32 @@ const SimplePaperRelationships = ({ paperId, onPaperClick, prefetchedGraphData }
   // Auto-explore relationships when paper ID changes or prefetched data is available
   useEffect(() => {
     if (paperId) {
+      // First, check if we have cached graph data
+      const cachedGraphData = localStorage.getItem(`graph_${paperId}`);
+      
+      if (cachedGraphData) {
+        console.log('Using cached graph data for:', paperId);
+        try {
+          const parsedData = JSON.parse(cachedGraphData);
+          setRelationships(parsedData);
+          setLoading(false);
+          setError(null);
+          return;
+        } catch (error) {
+          console.error('Error parsing cached graph data:', error);
+          // Continue to fetch fresh data if cache is corrupted
+        }
+      }
+      
       if (prefetchedGraphData) {
         console.log('Using prefetched graph data:', prefetchedGraphData);
         console.log('Has visualization_data:', !!prefetchedGraphData.visualization_data);
         console.log('Has connections:', !!prefetchedGraphData.connections);
         console.log('Full data structure:', JSON.stringify(Object.keys(prefetchedGraphData), null, 2));
+        
+        // Save prefetched data to cache
+        localStorage.setItem(`graph_${paperId}`, JSON.stringify(prefetchedGraphData));
+        
         setRelationships(prefetchedGraphData);
         setLoading(false);
         setError(null);
@@ -39,6 +60,10 @@ const SimplePaperRelationships = ({ paperId, onPaperClick, prefetchedGraphData }
       console.log("Similar papers:", data?.connections?.similar_papers);
       if (data.success) {
         setRelationships(data);
+        
+        // Cache the graph data in localStorage
+        localStorage.setItem(`graph_${paperId}`, JSON.stringify(data));
+        console.log('Graph data cached for:', paperId);
       } else {
         setError(data.error || 'Failed to explore paper relationships');
       }

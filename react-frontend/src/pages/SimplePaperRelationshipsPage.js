@@ -48,8 +48,8 @@ const SimplePaperRelationshipsPage = () => {
       // Update URL params
       setSearchParams({ paperId: paperId });
       
-      // Clear the state to prevent re-triggering
-      navigate(location.pathname, { state: null, replace: true });
+      // Clear the state to prevent re-triggering (keep the search params)
+      window.history.replaceState(null, '', `${location.pathname}?paperId=${paperId}`);
       return;
     }
 
@@ -160,6 +160,11 @@ const SimplePaperRelationshipsPage = () => {
 
       {/* Main Content */}
       <div className="main-content">
+        <div className="paper-relations-header">
+          <button onClick={() => navigate('/search')} className="back-button">
+            ← Back to Results
+          </button>
+        </div>
         <SimplePaperRelationships 
           paperId={currentPaperId}
           onPaperClick={handlePaperClick}
