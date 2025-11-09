@@ -152,9 +152,9 @@ const HomePage = () => {
       {/* Features Section */}
       <section className="features-section">
         <div className="features-header">
-          <h2 className="features-title">LITERATURE REVIEW SOFTWARE FOR BETTER RESEARCH</h2>
+          <h2 className="features-title">YOUR AI COMPANION FOR SEARCHING RESEARCH PAPERS</h2>
           <p className="features-subtitle">
-            Used by researchers, students and professionals across <strong>150</strong> countries.
+            Navigate <strong>Academic papers </strong>, <strong>Build Citation Graphs </strong>, and uncover hidden connections.
           </p>
         </div>
 
@@ -176,7 +176,7 @@ const HomePage = () => {
         <div className="cta-section">
           <button 
             className="cta-button"
-            onClick={() => navigate('/search')}
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           >
             Get Started
             <svg className="cta-arrow" viewBox="0 0 20 20" fill="currentColor">

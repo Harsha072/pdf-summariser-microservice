@@ -8,7 +8,7 @@ import './Header.css';
 
 const navItems = [
 
-   { label: 'About', path: '/help', description: 'Usage instructions'},
+   { label: 'About', path: '/about', description: 'Learn about Scholar Quest'},
   { label: 'Search History', path: '/history', description: 'Recent searches'},
   { label: 'Saved Papers', path: '/saved', description: 'Bookmarked papers'},
   { label: 'User Profile', path: '/profile', description: 'User Profile' },

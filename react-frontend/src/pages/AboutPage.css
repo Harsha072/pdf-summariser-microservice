@@ -1,0 +1,375 @@
+/* About Page Styles */
+
+.about-page {
+  width: 100%;
+  background: #f8f9fa;
+}
+
+/* Hero Section */
+.about-hero {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 80px 20px;
+  text-align: center;
+}
+
+.about-hero-content {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.about-title {
+  font-size: 3rem;
+  font-weight: 700;
+  margin: 0 0 20px 0;
+  line-height: 1.2;
+}
+
+.about-subtitle {
+  font-size: 1.25rem;
+  margin: 0;
+  opacity: 0.95;
+  line-height: 1.6;
+}
+
+/* Sections */
+.about-section {
+  padding: 80px 20px;
+}
+
+.about-section:nth-child(even) {
+  background: white;
+}
+
+.section-content {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.section-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  text-align: center;
+  margin: 0 0 20px 0;
+  color: #2c3e50;
+}
+
+.section-intro {
+  text-align: center;
+  font-size: 1.125rem;
+  color: #6c757d;
+  max-width: 700px;
+  margin: 0 auto 60px auto;
+  line-height: 1.6;
+}
+
+/* Story Section */
+.story-content {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.story-text {
+  font-size: 1.125rem;
+  line-height: 1.8;
+  color: #495057;
+  margin-bottom: 20px;
+}
+
+.story-text strong {
+  color: #667eea;
+  font-weight: 600;
+}
+
+/* Challenges Grid */
+.challenges-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 30px;
+  margin-top: 40px;
+}
+
+.challenge-card {
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.challenge-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+}
+
+.challenge-icon {
+  width: 60px;
+  height: 60px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.challenge-icon i {
+  font-size: 24px;
+  color: white;
+}
+
+.challenge-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #2c3e50;
+  margin: 0 0 12px 0;
+}
+
+.challenge-description {
+  font-size: 1rem;
+  line-height: 1.6;
+  color: #6c757d;
+  margin: 0;
+}
+
+/* Solutions List */
+.solutions-list {
+  margin-top: 60px;
+}
+
+.solution-item {
+  display: flex;
+  gap: 30px;
+  margin-bottom: 50px;
+  align-items: flex-start;
+}
+
+.solution-number {
+  width: 60px;
+  height: 60px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.solution-content {
+  flex: 1;
+}
+
+.solution-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #2c3e50;
+  margin: 0 0 12px 0;
+}
+
+.solution-description {
+  font-size: 1rem;
+  line-height: 1.6;
+  color: #495057;
+  margin: 0 0 15px 0;
+}
+
+.solution-features {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.solution-features li {
+  padding: 8px 0 8px 30px;
+  position: relative;
+  color: #6c757d;
+  line-height: 1.6;
+}
+
+.solution-features li:before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: #28a745;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+/* Impact Section */
+.impact-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 40px;
+  margin-top: 60px;
+}
+
+.stat-card {
+  text-align: center;
+  padding: 40px 20px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.stat-number {
+  font-size: 3rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 10px;
+}
+
+.stat-label {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 10px;
+}
+
+.stat-description {
+  font-size: 0.95rem;
+  color: #6c757d;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Mission Section */
+.mission-content {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.mission-text {
+  font-size: 1.125rem;
+  line-height: 1.8;
+  color: #495057;
+  margin-bottom: 30px;
+}
+
+.mission-text strong {
+  color: #667eea;
+  font-weight: 600;
+}
+
+.mission-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.mission-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  padding: 15px 0;
+  font-size: 1.125rem;
+  color: #495057;
+  line-height: 1.6;
+}
+
+.mission-list i {
+  color: #28a745;
+  font-size: 1.25rem;
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+/* CTA Section */
+.about-cta-section {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 80px 20px;
+  text-align: center;
+}
+
+.cta-content {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.cta-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin: 0 0 20px 0;
+}
+
+.cta-description {
+  font-size: 1.125rem;
+  margin: 0 0 40px 0;
+  opacity: 0.95;
+  line-height: 1.6;
+}
+
+.cta-button {
+  background: white;
+  color: #667eea;
+  border: none;
+  padding: 16px 40px;
+  font-size: 1.125rem;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cta-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+}
+
+.cta-button i {
+  transition: transform 0.3s ease;
+}
+
+.cta-button:hover i {
+  transform: translateX(5px);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .about-title {
+    font-size: 2rem;
+  }
+
+  .about-subtitle {
+    font-size: 1rem;
+  }
+
+  .section-title {
+    font-size: 1.75rem;
+  }
+
+  .about-section {
+    padding: 50px 20px;
+  }
+
+  .challenges-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .solution-item {
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .impact-stats {
+    grid-template-columns: 1fr;
+    gap: 30px;
+  }
+
+  .stat-number {
+    font-size: 2.5rem;
+  }
+
+  .cta-title {
+    font-size: 1.75rem;
+  }
+}

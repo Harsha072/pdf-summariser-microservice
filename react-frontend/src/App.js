@@ -5,11 +5,11 @@ import Header from './components/Header/Header';
 import HomePage from './pages/HomePage';
 import PaperDiscovery from './components/PaperDiscovery/PaperDiscovery';
 import PaperDetails from './components/PaperDetails/PaperDetails';
-import SideNavigation from './components/SideNavigation/SideNavigation';
 import SearchHistoryPage from './pages/SearchHistory';
 import SavedPapers from './pages/SavedPapers';
 import HelpGuide from './pages/HelpGuide';
 import UserProfile from './pages/UserProfile';
+import AboutPage from './pages/AboutPage';
 import SimplePaperRelationshipsPage from './pages/SimplePaperRelationshipsPage';
 import Notification from './components/Notification/Notification';
 import { NotificationProvider } from './context/NotificationContext';
@@ -27,7 +27,6 @@ console.log('🚀 App.js - Backend Configuration:', {
 
 function App() {
   const [backendConnection, setBackendConnection] = useState('checking');
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
     // Initialize session and check backend connection on startup
@@ -69,27 +68,13 @@ function App() {
     }
   };
 
-  const toggleMenu = () => {
-    setIsMenuOpen(!isMenuOpen);
-  };
-
-  const closeMenu = () => {
-    setIsMenuOpen(false);
-  };
-
   return (
     <Router>
       <AuthProvider>
         <NotificationProvider>
           <div className="app">
             <Header 
-              connectionStatus={backendConnection} 
-              onMenuToggle={toggleMenu}
-              isMenuOpen={isMenuOpen}
-            />
-            <SideNavigation 
-              isOpen={isMenuOpen}
-              onClose={closeMenu}
+              connectionStatus={backendConnection}
             />
             <main className="app-main">
               <Routes>
@@ -100,6 +85,7 @@ function App() {
                 <Route path="/history" element={<SearchHistoryPage />} />
                 <Route path="/saved" element={<SavedPapers />} />
                 <Route path="/help" element={<HelpGuide />} />
+                <Route path="/about" element={<AboutPage />} />
                 <Route path="/profile" element={<UserProfile />} />
               </Routes>
             </main>
