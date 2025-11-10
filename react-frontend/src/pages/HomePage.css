@@ -420,3 +420,245 @@
     font-size: 1.25rem;
   }
 }
+
+/* Our Impact Section */
+.impact-section {
+  padding: 80px 20px;
+  background: #f8f9fa;
+}
+
+.section-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #2c3e50;
+  text-align: center;
+  margin: 0 0 60px 0;
+}
+
+.impact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 40px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.impact-card {
+  background: white;
+  padding: 40px 30px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.impact-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15);
+}
+
+.impact-number {
+  font-size: 3.5rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 16px;
+}
+
+.impact-label {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #495057;
+  margin-bottom: 12px;
+}
+
+.impact-description {
+  font-size: 0.95rem;
+  color: #6c757d;
+  line-height: 1.5;
+}
+
+/* Our Mission Section */
+.mission-section {
+  padding: 80px 20px;
+  background: white;
+}
+
+.mission-content {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.mission-intro {
+  font-size: 1.25rem;
+  color: #495057;
+  text-align: center;
+  margin-bottom: 40px;
+  line-height: 1.8;
+}
+
+.mission-highlight {
+  color: #667eea;
+  font-weight: 600;
+}
+
+.mission-beliefs {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.belief-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.belief-item:hover {
+  background: #e9ecef;
+  transform: translateX(8px);
+}
+
+.check-icon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  color: #28a745;
+  margin-top: 2px;
+}
+
+.belief-item span {
+  font-size: 1.05rem;
+  color: #495057;
+  line-height: 1.6;
+}
+
+/* Transform Section (CTA) */
+.transform-section {
+  padding: 100px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  text-align: center;
+}
+
+.transform-content {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.transform-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: white;
+  margin: 0 0 20px 0;
+}
+
+.transform-description {
+  font-size: 1.15rem;
+  color: rgba(255, 255, 255, 0.9);
+  margin: 0 0 40px 0;
+  line-height: 1.6;
+}
+
+.transform-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 40px;
+  background: white;
+  color: #667eea;
+  border: none;
+  border-radius: 50px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.transform-button:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.transform-button:active {
+  transform: translateY(-2px);
+}
+
+.arrow-icon {
+  width: 20px;
+  height: 20px;
+  transition: transform 0.3s ease;
+}
+
+.transform-button:hover .arrow-icon {
+  transform: translateX(4px);
+}
+
+/* Responsive Design for New Sections */
+@media (max-width: 768px) {
+  .section-title {
+    font-size: 2rem;
+  }
+
+  .impact-grid {
+    grid-template-columns: 1fr;
+    gap: 30px;
+  }
+
+  .impact-number {
+    font-size: 2.5rem;
+  }
+
+  .mission-intro {
+    font-size: 1.1rem;
+  }
+
+  .belief-item span {
+    font-size: 1rem;
+  }
+
+  .transform-title {
+    font-size: 2rem;
+  }
+
+  .transform-description {
+    font-size: 1rem;
+  }
+
+  .transform-button {
+    padding: 14px 32px;
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .section-title {
+    font-size: 1.75rem;
+  }
+
+  .impact-card {
+    padding: 30px 20px;
+  }
+
+  .impact-number {
+    font-size: 2rem;
+  }
+
+  .mission-intro {
+    font-size: 1rem;
+  }
+
+  .belief-item {
+    padding: 16px;
+  }
+
+  .transform-title {
+    font-size: 1.75rem;
+  }
+}
