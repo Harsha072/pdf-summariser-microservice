@@ -127,10 +127,20 @@
 }
 
 .compact-search-box .search-icon {
-  width: 18px;
-  height: 18px;
-  color: #6c757d;
+  width: 20px;
+  height: 20px;
+  color: #667eea;
   flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.compact-search-box .search-icon.clickable:hover {
+  color: #5568d3;
+  transform: scale(1.1);
+}
+
+.compact-search-box .search-icon.clickable:active {
+  transform: scale(0.95);
 }
 
 .compact-search-input {

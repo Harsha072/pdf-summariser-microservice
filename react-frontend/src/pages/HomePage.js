@@ -48,25 +48,6 @@ const HomePage = () => {
     }
   };
 
-  const features = [
-    {
-      title: 'Discover',
-      description: 'Discover the most relevant academic papers faster',
-      link: '/about'
-    },
-    {
-      title: 'Visualize',
-      description: 'See your research paper connections from a bird\'s-eye view',
-      link: '/about'
-    },
-
-    {
-      title: 'Save',
-      description: 'Save your favourite research paper for future',
-      link: '/about'
-    }
-  ];
-
   return (
     <div className="homepage">
       {/* Loading Overlay */}
@@ -151,42 +132,127 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* Features Section */}
-      <section className="features-section">
-        <div className="features-header">
-          <h2 className="features-title">YOUR AI COMPANION FOR SEARCHING RESEARCH PAPERS</h2>
-          <p className="features-subtitle">
-            Navigate <strong>Academic papers </strong>, <strong>Build Citation Graphs </strong>, and uncover hidden connections.
+      {/* Our Impact Section */}
+      <section className="impact-section">
+        <h2 className="section-title">Our Impact</h2>
+        <div className="impact-grid">
+          <div className="impact-card">
+            <div className="impact-number">10x</div>
+            <div className="impact-label">Faster Literature Reviews</div>
+            <div className="impact-description">Students complete literature reviews in days instead of weeks</div>
+          </div>
+          <div className="impact-card">
+            <div className="impact-number">Paper Networks</div>
+            <div className="impact-label">Visualize Connections</div>
+            <div className="impact-description">Visualize paper connections and citation relationships</div>
+          </div>
+        </div>
+      </section>
+
+      {/* Our Mission Section */}
+      <section className="mission-section">
+        <h2 className="section-title">Our Mission</h2>
+        <div className="mission-content">
+          <p className="mission-intro">
+            Our mission is to <span className="mission-highlight">democratize academic research</span> by making literature discovery fast, intuitive, and accessible to everyone. We believe that:
           </p>
-        </div>
-
-        <div className="features-grid">
-          {features.map((feature, index) => (
-            <div key={index} className="feature-card">
-              <h3 className="feature-title">{feature.title}</h3>
-              <p className="feature-description">{feature.description}</p>
-              <button 
-                className="feature-link"
-                onClick={() => navigate(feature.link)}
-              >
-                LEARN MORE
-              </button>
+          <div className="mission-beliefs">
+            <div className="belief-item">
+              <svg className="check-icon" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+              </svg>
+              <span>Every student deserves powerful research tools, regardless of their institution or budget</span>
             </div>
-          ))}
+            <div className="belief-item">
+              <svg className="check-icon" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+              </svg>
+              <span>Technology should simplify research, not complicate it</span>
+            </div>
+            <div className="belief-item">
+              <svg className="check-icon" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+              </svg>
+              <span>Understanding research connections is as important as finding individual papers</span>
+            </div>
+            <div className="belief-item">
+              <svg className="check-icon" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+              </svg>
+              <span>AI can augment human intelligence to accelerate discovery</span>
+            </div>
+          </div>
         </div>
+      </section>
 
-        <div className="cta-section">
+      {/* Call to Action Section */}
+      <section className="transform-section">
+        <div className="transform-content">
+          <h2 className="transform-title">Ready to Transform Your Research?</h2>
+          <p className="transform-description">
+            Join thousands of students and researchers who are discovering papers faster and understanding research better.
+          </p>
           <button 
-            className="cta-button"
+            className="transform-button"
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           >
-            Get Started
-            <svg className="cta-arrow" viewBox="0 0 20 20" fill="currentColor">
+            Start Exploring
+            <svg className="arrow-icon" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" />
             </svg>
           </button>
         </div>
       </section>
+      <footer className="about-footer">
+        <div className="footer-content">
+          <div className="footer-grid">
+            <div className="footer-column">
+              <h3 className="footer-heading">Scholar Quest</h3>
+              <p className="footer-description">
+                Empowering researchers and students to navigate academic literature with AI-powered tools and intelligent insights.
+              </p>
+            </div>
+
+            <div className="footer-column">
+              <h4 className="footer-title">Product</h4>
+              <ul className="footer-links">
+                <li><a href="/search">Search Papers</a></li>
+                <li><a href="/saved">Saved Papers</a></li>
+                <li><a href="/history">Search History</a></li>
+                <li><a href="/paper-relationships">Citation Network</a></li>
+              </ul>
+            </div>
+
+            <div className="footer-column">
+              <h4 className="footer-title">Company</h4>
+              <ul className="footer-links">
+                <li><a href="/about">About Us</a></li>
+                <li><a href="/about#mission">Our Mission</a></li>
+                <li><a href="/about#impact">Impact</a></li>
+              </ul>
+            </div>
+
+            <div className="footer-column">
+              <h4 className="footer-title">Connect</h4>
+              <ul className="footer-links">
+                <li><a href="mailto:support@scholarquest.com">Contact Us</a></li>
+                <li><a href="https://github.com/Harsha072/pdf-summariser-microservice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="footer-bottom">
+            <p className="footer-copyright">
+              &copy; {new Date().getFullYear()} Scholar Quest. All rights reserved.
+            </p>
+            <div className="footer-bottom-links">
+              <a href="/privacy">Privacy Policy</a>
+              <span className="separator">•</span>
+              <a href="/terms">Terms of Service</a>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };

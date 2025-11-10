@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { getCachedSearchResults, getCurrentSessionId } from '../../services/api';
-// import { discoverPapers } from '../../services/api'; // Unused - for future query-based search feature
+import { getCachedSearchResults, getCurrentSessionId, discoverPapers } from '../../services/api';
 // import { AuthButton, ProtectedFeature } from '../Auth/InlineAuth'; // Currently unused
 // import { SmartPaperActions } from './ProtectedPaperFeatures'; // Currently unused
 import { useAuth } from '../../context/AuthContext';
@@ -152,6 +151,46 @@ const PaperDiscovery = () => {
 
     loadCachedResults();
   }, []);
+
+  // Handle search button click
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) {
+      setError('Please enter a search query');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError('');
+      console.log('PaperDiscovery: Starting search for:', searchQuery.trim());
+      console.log('PaperDiscovery: Current session ID:', getCurrentSessionId());
+      
+      // Call backend API to discover papers (same as HomePage)
+      const response = await discoverPapers(searchQuery.trim(), ['openalex'], maxResults);
+      console.log('PaperDiscovery: API Response received:', response);
+      console.log('PaperDiscovery: Number of papers:', response?.papers?.length || 0);
+      
+      if (response.success) {
+        setDiscoveredPapers(response.papers || []);
+        
+        // Update cache status
+        if (response.from_cache) {
+          setCacheStatus(`Results loaded from cache (${new Date(response.cache_timestamp).toLocaleTimeString()})`);
+        } else {
+          setCacheStatus('Fresh results - now cached for future use');
+        }
+      } else {
+        setError(response.error || 'Failed to discover papers');
+        setCacheStatus('');
+      }
+    } catch (error) {
+      console.error('PaperDiscovery: Search failed:', error);
+      setError('Failed to connect to the discovery engine');
+      setCacheStatus('');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleViewDetails = (paper, index) => {
     // Show loading overlay
@@ -469,9 +508,6 @@ const PaperDiscovery = () => {
       <div className="discovery-controls">
         <div className="compact-search-section">
           <div className="compact-search-box">
-            <svg className="search-icon" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" />
-            </svg>
             <input
               type="text"
               placeholder="Search papers..."
@@ -480,11 +516,19 @@ const PaperDiscovery = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyPress={(e) => {
                 if (e.key === 'Enter' && searchQuery.trim()) {
-                  // Call the same search function as homepage
-                  window.location.href = `/?q=${encodeURIComponent(searchQuery.trim())}`;
+                  handleSearch();
                 }
               }}
             />
+            <svg 
+              className="search-icon clickable" 
+              viewBox="0 0 20 20" 
+              fill="currentColor"
+              onClick={handleSearch}
+              style={{ cursor: isLoading || !searchQuery.trim() ? 'not-allowed' : 'pointer', opacity: isLoading || !searchQuery.trim() ? 0.5 : 1 }}
+            >
+              <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" />
+            </svg>
           </div>
           
           <div className="max-results-compact">
@@ -517,24 +561,6 @@ const PaperDiscovery = () => {
         <div className="results-section">
           <div className="results-header">
             <h3>Discovered Papers ({discoveredPapers.length})</h3>
-            <div className="results-actions">
-              {cacheStatus && (
-                <div className="cache-status">
-                  <span className="cache-indicator">{cacheStatus}</span>
-                </div>
-              )}
-              <button
-                onClick={() => navigate(`/paper-relationships?ts=${Date.now()}`, { 
-                  state: { papers: discoveredPapers.slice(0, 5) } 
-                })}
-                className="citation-network-btn"
-                disabled={discoveredPapers.length === 0}
-                title="Explore paper relationships with discovered papers"
-              >
-                <i className="fas fa-project-diagram"></i>
-                Explore Paper Network
-              </button>
-            </div>
           </div>
           
           {/* Authorization info for search results */}

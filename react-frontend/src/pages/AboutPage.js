@@ -182,82 +182,65 @@ const AboutPage = () => {
       </section>
 
       {/* Impact Section */}
-      <section className="about-section impact-section">
-        <div className="section-content">
-          <h2 className="section-title">Our Impact</h2>
-          <div className="impact-stats">
-            <div className="stat-card">
-              <div className="stat-number">10x</div>
-              <div className="stat-label">Faster Literature Reviews</div>
-              <p className="stat-description">
-                Students complete literature reviews in days instead of weeks
-              </p>
-            </div>
-            <div className="stat-card">
-              <div className="stat-number">Millions</div>
-              <div className="stat-label">Papers Accessible</div>
-              <p className="stat-description">
-                Access to comprehensive open-access research databases
-              </p>
-            </div>
-            <div className="stat-card">
-              <div className="stat-number">150+</div>
-              <div className="stat-label">Countries Reached</div>
-              <p className="stat-description">
-                Helping students and researchers worldwide
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
+      
 
       {/* Mission Section */}
-      <section className="about-section mission-section">
-        <div className="section-content">
-          <h2 className="section-title">Our Mission</h2>
-          <div className="mission-content">
-            <p className="mission-text">
-              Our mission is to <strong>democratize academic research</strong> by making literature discovery 
-              fast, intuitive, and accessible to everyone. We believe that:
-            </p>
-            <ul className="mission-list">
-              <li>
-                <i className="fas fa-check-circle"></i>
-                <span>Every student deserves powerful research tools, regardless of their institution or budget</span>
-              </li>
-              <li>
-                <i className="fas fa-check-circle"></i>
-                <span>Technology should simplify research, not complicate it</span>
-              </li>
-              <li>
-                <i className="fas fa-check-circle"></i>
-                <span>Understanding research connections is as important as finding individual papers</span>
-              </li>
-              <li>
-                <i className="fas fa-check-circle"></i>
-                <span>AI can augment human intelligence to accelerate discovery</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </section>
+     
 
       {/* CTA Section */}
-      <section className="about-cta-section">
-        <div className="cta-content">
-          <h2 className="cta-title">Ready to Transform Your Research?</h2>
-          <p className="cta-description">
-            Join thousands of students and researchers who are discovering papers faster and understanding research better.
-          </p>
-          <button 
-            className="cta-button"
-            onClick={() => window.location.href = '/search'}
-          >
-            Start Exploring
-            <i className="fas fa-arrow-right"></i>
-          </button>
+      
+
+      {/* Footer Section */}
+      <footer className="about-footer">
+        <div className="footer-content">
+          <div className="footer-grid">
+            <div className="footer-column">
+              <h3 className="footer-heading">Scholar Quest</h3>
+              <p className="footer-description">
+                Empowering researchers and students to navigate academic literature with AI-powered tools and intelligent insights.
+              </p>
+            </div>
+
+            <div className="footer-column">
+              <h4 className="footer-title">Product</h4>
+              <ul className="footer-links">
+                <li><a href="/search">Search Papers</a></li>
+                <li><a href="/saved">Saved Papers</a></li>
+                <li><a href="/history">Search History</a></li>
+                <li><a href="/paper-relationships">Citation Network</a></li>
+              </ul>
+            </div>
+
+            <div className="footer-column">
+              <h4 className="footer-title">Company</h4>
+              <ul className="footer-links">
+                <li><a href="/about">About Us</a></li>
+                <li><a href="/about#mission">Our Mission</a></li>
+                <li><a href="/about#impact">Impact</a></li>
+              </ul>
+            </div>
+
+            <div className="footer-column">
+              <h4 className="footer-title">Connect</h4>
+              <ul className="footer-links">
+                <li><a href="mailto:support@scholarquest.com">Contact Us</a></li>
+                <li><a href="https://github.com/Harsha072/pdf-summariser-microservice" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="footer-bottom">
+            <p className="footer-copyright">
+              &copy; {new Date().getFullYear()} Scholar Quest. All rights reserved.
+            </p>
+            <div className="footer-bottom-links">
+              <a href="/privacy">Privacy Policy</a>
+              <span className="separator">•</span>
+              <a href="/terms">Terms of Service</a>
+            </div>
+          </div>
         </div>
-      </section>
+      </footer>
     </div>
   );
 };
