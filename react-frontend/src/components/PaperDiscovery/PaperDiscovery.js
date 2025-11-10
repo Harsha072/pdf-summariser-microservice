@@ -35,7 +35,8 @@ const PaperDiscovery = () => {
   // const [selectedSources, setSelectedSources] = useState(['openalex']); // Unused - for future multi-source feature
   const [maxResults, setMaxResults] = useState(10);
   const [error, setError] = useState('');
-  const [cacheStatus, setCacheStatus] = useState('');
+  // eslint-disable-next-line no-unused-vars
+  const [cacheStatus, setCacheStatus] = useState(''); // Cache status tracking - not currently displayed
   const [bookmarkStatus, setBookmarkStatus] = useState({}); // Track bookmark status for papers
   const [buildingGraphFor, setBuildingGraphFor] = useState(null); // Track which paper is building graph
   const [isGeneratingAnalysis, setIsGeneratingAnalysis] = useState(false); // Track analysis generation
