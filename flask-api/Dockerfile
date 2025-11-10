@@ -46,8 +46,8 @@ RUN pip install --no-cache-dir fuzzywuzzy==0.18.0 python-levenshtein==0.23.0
 # Install PyMuPDF
 RUN pip install --no-cache-dir PyMuPDF==1.24.13
 
-# Install sentence-transformers with dependencies
-RUN pip install --no-cache-dir sentence-transformers==2.5.1 huggingface-hub==0.20.3
+# Install sentence-transformers with dependencies (with retry on network errors)
+RUN pip install --no-cache-dir --retries 5 --timeout 100 sentence-transformers==2.5.1 huggingface-hub==0.20.3
 
 # Install Firebase
 RUN pip install --no-cache-dir firebase-admin==6.3.0
